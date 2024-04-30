@@ -3,12 +3,16 @@ name = "wasmphobia"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+default = ["cli-args"]
+cli-args = ["dep:clap"]
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 anyhow.workspace = true
-clap = { version = "4.5.4", features = ["derive"] }
+clap = { version = "4.5.4", features = ["derive"], optional = true }
 gimli = "0.26.2"
-inferno = { version = "0.11.19", default-features = false }
+inferno = { version = "0.11.19", default-features = false, features = ["nameattr"] }
 walrus = "0.20.3"
 wasmparser = "0.206.0"

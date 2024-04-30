@@ -1,48 +1,87 @@
 use std::{
     collections::HashMap,
+    io::{Read, Write},
     ops::{Range, Sub},
     path::PathBuf,
 };
 
-use clap::Parser;
+use anyhow::anyhow;
 use gimli::{EndianSlice, LittleEndian};
 
-#[derive(Debug, Parser)]
-pub struct Args {
-    input: PathBuf,
-    output: PathBuf,
+#[cfg(feature = "cli-args")]
+use clap::Parser;
+
+#[derive(Default, Debug)]
+#[cfg_attr(feature = "cli-args", derive(Parser))]
+#[cfg_attr(feature = "cli-args", command(version))]
+struct Args {
+    #[cfg_attr(feature = "cli-args", arg(short, long))]
+    input: Option<PathBuf>,
+    #[cfg_attr(feature = "cli-args", arg(short, long))]
+    output: Option<PathBuf>,
+}
+
+#[cfg(not(feature = "cli-args"))]
+impl Args {
+    fn parse() -> Self {
+        Default::default()
+    }
 }
 
 fn main() -> anyhow::Result<()> {
+    let stdinout_marker: PathBuf = PathBuf::from("-");
+
     let args = Args::parse();
-    let content = std::fs::read(&args.input)?;
-    let module = walrus::Module::from_buffer(&content)?;
+    let input_data = match &args.input {
+        Some(path) if path != &stdinout_marker => std::fs::read(path)?,
+        _ => read_stdin()?,
+    };
+
+    let module = walrus::Module::from_buffer(&input_data)?;
     let dwarf = module.debug.dwarf;
     let dwarf = dwarf.borrow(|v| EndianSlice::new(v.as_slice(), LittleEndian));
 
-    let mut contributors = accumulate_contributors(Some("@wasm_binary/sections/code/"), dwarf)?;
-    contributors.extend(section_sizes(Some("@wasm_binary/sections/"), &content)?);
-    let keys: Vec<_> = contributors
-        .keys()
-        .map(|s| s.split('/').collect::<Vec<_>>())
+    const WASM_CODE_SECTION: &str = "@wasm_binary/sections/code";
+    let mut contributors =
+        accumulate_contributors(Some((WASM_CODE_SECTION.to_string() + "/").as_str()), dwarf)?;
+    let mut wasm_section_sizes = section_sizes(Some("@wasm_binary/sections/"), &input_data)?;
+    let mapped_wasm_code_size: u64 = contributors.values().sum();
+    let total_code_size = wasm_section_sizes
+        .remove(WASM_CODE_SECTION)
+        .ok_or_else(|| anyhow!("Wasm module without a code section"))?;
+    let unmapped_wasm_code_size = total_code_size - mapped_wasm_code_size;
+    contributors.extend(wasm_section_sizes);
+    contributors.insert(
+        format!("{WASM_CODE_SECTION}/<unmapped>"),
+        unmapped_wasm_code_size,
+    );
+
+    let mut output: Box<dyn Write> = match &args.output {
+        Some(path) if path != &stdinout_marker => Box::new(std::fs::File::create(path)?),
+        _ => Box::new(std::io::stdout()),
+    };
+
+    let inferno_lines: Vec<_> = contributors
+        .into_iter()
+        .map(|(key, size)| {
+            let inferno_key = key.replace(['/', '\\'], ";");
+            format!("{} {}", inferno_key, size)
+        })
         .collect();
-    let tree = PrefixTreeNode::build(keys);
 
-    let mut output = std::fs::File::create(args.output)?;
-
-    let inferno_lines = to_inferno_lines(tree, &contributors);
     let mut options = inferno::flamegraph::Options::default();
     options.title = args
         .input
-        .file_name()
+        .as_ref()
+        .and_then(|s| s.file_name())
         .and_then(|s| s.to_str())
         .unwrap_or("<Unknown wasm file>")
         .to_string();
     options.subtitle =
         Some("Contribution to WebAssembly module size per DWARF compilation unit".to_string());
     options.count_name = "KB".to_string();
-    options.notes = "The flamegraph lololol".to_string();
     options.factor = 1.0 / 1000.0;
+    options.name_type = "".to_string();
     inferno::flamegraph::from_lines(
         &mut options,
         inferno_lines.iter().map(|v| v.as_str()),
@@ -50,6 +89,12 @@ fn main() -> anyhow::Result<()> {
     )?;
 
     Ok(())
+}
+
+fn read_stdin() -> std::io::Result<Vec<u8>> {
+    let mut buf = vec![];
+    std::io::stdin().read_to_end(&mut buf)?;
+    Ok(buf)
 }
 
 fn range_size<T: Sub<Output = T>>(r: Range<T>) -> T {
@@ -81,9 +126,7 @@ fn section_sizes(prefix: Option<&str>, mut module: &[u8]) -> anyhow::Result<Hash
             Payload::GlobalSection(s) => ("global".to_string(), range_size(s.range())),
             Payload::ElementSection(s) => ("element".to_string(), range_size(s.range())),
             Payload::UnknownSection { range, .. } => ("<unknown>".to_string(), range_size(range)),
-
-            // Handled by DWARF analysis
-            // Payload::CodeSectionStart { range, .. } => {}
+            Payload::CodeSectionStart { range, .. } => ("code".to_string(), range_size(range)),
             Payload::End(_) => break,
             _ => continue,
         };
@@ -91,21 +134,6 @@ fn section_sizes(prefix: Option<&str>, mut module: &[u8]) -> anyhow::Result<Hash
     }
 
     Ok(sections)
-}
-
-fn to_inferno_lines(tree: PrefixTreeNode<'_>, contributors: &HashMap<String, u64>) -> Vec<String> {
-    let inferno_lines: Vec<_> = tree
-        .dfs()
-        .into_iter()
-        .filter_map(|entry| {
-            let _subtree = tree.lookup(&entry)?;
-            let key = entry.join("/");
-            let size = *contributors.get(&key)?;
-            Some((entry, size))
-        })
-        .map(|(entry, size)| format!("{} {}", entry.join(";"), size))
-        .collect();
-    inferno_lines
 }
 
 fn accumulate_contributors(
@@ -132,118 +160,4 @@ fn accumulate_contributors(
         *contributors.entry(name).or_insert(0) += size;
     }
     Ok(contributors)
-}
-
-#[derive(Debug, Clone)]
-struct PrefixTreeNode<'a> {
-    prefix: Vec<&'a str>,
-    children: Vec<PrefixTreeNode<'a>>,
-}
-
-impl<'a> PrefixTreeNode<'a> {
-    fn build(mut data: Vec<Vec<&'a str>>) -> PrefixTreeNode<'a> {
-        let prefix = longest_common_prefix(&data).to_vec();
-        data.iter_mut().for_each(|item| {
-            item.copy_within(prefix.len().., 0);
-            item.truncate(item.len() - prefix.len());
-        });
-        data.retain(|l| !l.is_empty());
-        PrefixTreeNode {
-            prefix,
-            children: PrefixTreeNode::build_children(data),
-        }
-    }
-
-    // Invariant: data has no common prefix
-    fn build_children(data: Vec<Vec<&'a str>>) -> Vec<PrefixTreeNode<'a>> {
-        let mut groups: HashMap<&'a str, Vec<Vec<&'a str>>> = HashMap::new();
-        for item in data {
-            groups.entry(item[0]).or_default().push(item)
-        }
-        groups.into_values().map(PrefixTreeNode::build).collect()
-    }
-
-    fn lookup(&self, prefix: &[&'a str]) -> Option<&PrefixTreeNode> {
-        let len = prefix.len().min(self.prefix.len());
-        if self.prefix[0..len] != prefix[0..len] {
-            return None;
-        }
-        if len == self.prefix.len() {
-            return Some(self);
-        }
-        let new_prefix = &prefix[self.prefix.len()..];
-        self.children
-            .iter()
-            .find_map(|child| child.lookup(new_prefix))
-    }
-
-    fn dfs(&self) -> Vec<Vec<&'a str>> {
-        let mut r = vec![self.prefix.clone()];
-        for item in &self.children {
-            r.extend(item.dfs().into_iter().map(|item| {
-                let mut p = self.prefix.clone();
-                p.extend(item);
-                p
-            }));
-        }
-
-        r
-    }
-}
-
-fn longest_common_prefix<A: AsRef<[I]>, I: PartialEq>(s: &[A]) -> &'_ [I] {
-    let mut prefix = &s[0].as_ref()[0..0];
-
-    let max = s.iter().map(|s| s.as_ref().len()).min().unwrap_or(0);
-    for i in 0..=max {
-        let maybe_prefix = &s[0].as_ref()[0..i];
-        if !s.iter().all(|seg| &seg.as_ref()[0..i] == maybe_prefix) {
-            break;
-        }
-        prefix = maybe_prefix;
-    }
-
-    prefix
-}
-
-#[cfg(test)]
-mod tests {
-    use std::collections::HashSet;
-
-    use super::*;
-
-    #[test]
-    fn lcp() {
-        assert_eq!(
-            longest_common_prefix(&["hello world", "hello peter"]),
-            "hello ".as_bytes()
-        );
-    }
-
-    #[test]
-    fn lcp_trivial() {
-        assert_eq!(longest_common_prefix(&[&["test"]]), &["test"]);
-    }
-
-    #[test]
-    fn tree() {
-        let data = vec![
-            "/Users/surma".split('/').collect::<Vec<_>>(),
-            "/Users/surma/test".split('/').collect::<Vec<_>>(),
-            "/Users/surma/Downloads".split('/').collect::<Vec<_>>(),
-            "/tmp".split('/').collect::<Vec<_>>(),
-        ];
-        let tree = PrefixTreeNode::build(data);
-        let items: HashSet<_> = tree
-            .dfs()
-            .into_iter()
-            .map(|entry| entry.join("/"))
-            .collect();
-
-        let check_items = &["/Users/surma", "/tmp", "/Users/surma/test"];
-        for item in check_items {
-            assert!(items.contains(*item));
-        }
-        // assert!(items.c
-    }
 }
