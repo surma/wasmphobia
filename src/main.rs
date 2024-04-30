@@ -6,24 +6,81 @@ use gimli::{EndianSlice, LittleEndian};
 #[derive(Debug, Parser)]
 pub struct Args {
     input: PathBuf,
+    output: PathBuf,
 }
 
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();
-    let content = std::fs::read(args.input)?;
+    let content = std::fs::read(&args.input)?;
     let module = walrus::Module::from_buffer(&content)?;
     let dwarf = module.debug.dwarf;
     let dwarf = dwarf.borrow(|v| EndianSlice::new(v.as_slice(), LittleEndian));
 
-    let mut contributors: HashMap<String, u64> = HashMap::new();
+    let mut contributors = accumulate_contributors(dwarf)?;
     let data_sections = module.data.iter().enumerate().map(|(idx, data)| {
         let name = format!(
-            "/data/{}",
+            "/@wasm_binary/data_sections/{}",
             data.name.clone().unwrap_or_else(|| idx.to_string())
         );
         (name, u64::try_from(data.value.len()).unwrap())
     });
     contributors.extend(data_sections);
+    let keys: Vec<_> = contributors
+        .keys()
+        .map(|s| s.split('/').collect::<Vec<_>>())
+        .collect();
+    let tree = PrefixTreeNode::build(keys);
+
+    let mut output = std::fs::File::create(args.output)?;
+
+    let inferno_lines = to_inferno_lines(tree, &contributors);
+    let mut options = inferno::flamegraph::Options::default();
+    options.title = args
+        .input
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("<Unknown wasm file>")
+        .to_string();
+    options.subtitle = Some("Contribution to the code section per compilation unit".to_string());
+    options.count_name = "KB".to_string();
+    options.notes = "The flamegraph lololol".to_string();
+    options.factor = 1.0 / 1000.0;
+    inferno::flamegraph::from_lines(
+        &mut options,
+        inferno_lines.iter().map(|v| v.as_str()),
+        &mut output,
+    )?;
+
+    Ok(())
+}
+
+fn to_inferno_lines(tree: PrefixTreeNode<'_>, contributors: &HashMap<String, u64>) -> Vec<String> {
+    let inferno_lines: Vec<_> = tree
+        .dfs()
+        .into_iter()
+        .map(|entry| {
+            let size = if let Some(subtree) = tree.lookup(&entry) {
+                let key = entry.join("/");
+                total_size(contributors, key, subtree)
+            } else {
+                0
+            };
+            (entry, size)
+        })
+        .map(|(entry, size)| format!("{} {}", entry.join(";"), size))
+        .collect();
+    inferno_lines
+}
+
+fn total_size(contributors: &HashMap<String, u64>, key: String, _tree: &PrefixTreeNode<'_>) -> u64 {
+    let size = contributors.get(&key).copied().unwrap_or(0);
+    size
+}
+
+fn accumulate_contributors(
+    dwarf: gimli::Dwarf<EndianSlice<'_, LittleEndian>>,
+) -> Result<HashMap<String, u64>, anyhow::Error> {
+    let mut contributors: HashMap<String, u64> = HashMap::new();
     let mut iter = dwarf.units();
     while let Some(header) = iter.next()? {
         let unit = dwarf.unit(header)?;
@@ -41,15 +98,7 @@ fn main() -> anyhow::Result<()> {
 
         *contributors.entry(name).or_insert(0) += size;
     }
-    println!("{contributors:#?}");
-    let keys: Vec<_> = contributors
-        .keys()
-        .map(|s| s.split('/').collect::<Vec<_>>())
-        .collect();
-    let tree = PrefixTreeNode::build(keys);
-    println!("{:#?}", tree.dfs());
-
-    Ok(())
+    Ok(contributors)
 }
 
 #[derive(Debug, Clone)]
@@ -79,6 +128,20 @@ impl<'a> PrefixTreeNode<'a> {
             groups.entry(item[0]).or_default().push(item)
         }
         groups.into_values().map(PrefixTreeNode::build).collect()
+    }
+
+    fn lookup(&self, prefix: &[&'a str]) -> Option<&PrefixTreeNode> {
+        let len = prefix.len().min(self.prefix.len());
+        if self.prefix[0..len] != prefix[0..len] {
+            return None;
+        }
+        if len == self.prefix.len() {
+            return Some(self);
+        }
+        let new_prefix = &prefix[self.prefix.len()..];
+        self.children
+            .iter()
+            .find_map(|child| child.lookup(new_prefix))
     }
 
     fn dfs(&self) -> Vec<Vec<&'a str>> {

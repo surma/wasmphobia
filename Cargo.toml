@@ -9,4 +9,5 @@ edition = "2021"
 anyhow.workspace = true
 clap = { version = "4.5.4", features = ["derive"] }
 gimli = "0.26.2"
+inferno = { version = "0.11.19", default-features = false }
 walrus = "0.20.3"
