@@ -7,10 +7,13 @@ edition = "2021"
 default = ["cli-args"]
 cli-args = ["dep:clap"]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[profile.release]
+debug = true
+lto = true
+codegen-units = 1
 
 [dependencies]
-anyhow.workspace = true
+anyhow = "1.0.82"
 clap = { version = "4.5.4", features = ["derive"], optional = true }
 fallible-iterator = "0.2.0"
 gimli = "0.26.2"

@@ -1,0 +1,40 @@
+{
+  "json": {},
+  "markdown": {},
+  "toml": {},
+  "exec": {
+    "commands": [
+      {
+        "command": "rustfmt --edition 2021 --config unstable_features=true --config format_code_in_doc_comments=true",
+        "exts": [
+          "rs"
+        ]
+      },
+      {
+        "command": "npx prettier --write --parser html",
+        "exts": [
+          "html"
+        ]
+      },
+      {
+        "command": "npx prettier --write --parser css",
+        "exts": [
+          "css"
+        ]
+      }
+    ]
+  },
+  "excludes": [
+    "**/*-lock.json",
+    "wasm-bindgen/**",
+    "build/**",
+    "target/**"
+  ],
+  "plugins": [
+    "https://plugins.dprint.dev/json-0.19.1.wasm",
+    "https://plugins.dprint.dev/markdown-0.16.3.wasm",
+    "https://plugins.dprint.dev/toml-0.6.0.wasm",
+    "https://plugins.dprint.dev/exec-0.4.4.json@c207bf9b9a4ee1f0ecb75c594f774924baf62e8e53a2ce9d873816a408cecbf7",
+    "https://plugins.dprint.dev/typescript-0.90.2.wasm"
+  ]
+}

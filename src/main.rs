@@ -42,19 +42,19 @@ fn main() -> anyhow::Result<()> {
     let dwarf = module.debug.dwarf;
     let dwarf = dwarf.borrow(|v| EndianSlice::new(v.as_slice(), LittleEndian));
 
-    const WASM_CODE_SECTION: &str = "@wasm_binary/sections/code";
-    let mut contributors =
-        accumulate_contributors(Some((WASM_CODE_SECTION.to_string() + "/").as_str()), dwarf)?;
+    const WASM_SECTION_PREFIX: &str = "@wasm_binary_module;@section: ";
+    let wasm_code_section = format!("{WASM_SECTION_PREFIX}code");
+    let mut contributors = accumulate_contributors(Some(&format!("{wasm_code_section};")), dwarf)?;
 
-    let mut wasm_section_sizes = section_sizes(Some("@wasm_binary/sections/"), &input_data)?;
+    let mut wasm_section_sizes = section_sizes(Some(WASM_SECTION_PREFIX), &input_data)?;
     let mapped_wasm_code_size: u64 = contributors.values().sum();
     let total_code_size = wasm_section_sizes
-        .remove(WASM_CODE_SECTION)
+        .remove(&wasm_code_section)
         .ok_or_else(|| anyhow!("Wasm module without a code section"))?;
     let unmapped_wasm_code_size = total_code_size - mapped_wasm_code_size;
     contributors.extend(wasm_section_sizes);
     contributors.insert(
-        format!("{WASM_CODE_SECTION}/<unmapped>"),
+        format!("{wasm_code_section};<unmapped>"),
         unmapped_wasm_code_size,
     );
 
@@ -77,10 +77,7 @@ fn write_flamegraph(
 ) -> anyhow::Result<()> {
     let inferno_lines: Vec<_> = contributors
         .into_iter()
-        .map(|(key, size)| {
-            let inferno_key = key.replace(['/', '\\'], ";");
-            format!("{} {}", inferno_key, size)
-        })
+        .map(|(key, size)| format!("{} {}", key, size))
         .collect();
     inferno::flamegraph::from_lines(
         &mut options,
@@ -131,9 +128,9 @@ fn section_sizes(prefix: Option<&str>, mut module: &[u8]) -> anyhow::Result<Hash
 
         let (name, size) = match payload {
             // Sections for WebAssembly modules
-            Payload::TypeSection(s) => ("types".to_string(), range_size(s.range())),
+            Payload::TypeSection(s) => ("type".to_string(), range_size(s.range())),
             Payload::DataSection(s) => ("data".to_string(), range_size(s.range())),
-            Payload::CustomSection(s) => (format!("custom/{}", s.name()), range_size(s.range())),
+            Payload::CustomSection(s) => (format!("custom;{}", s.name()), range_size(s.range())),
             Payload::FunctionSection(s) => ("function".to_string(), range_size(s.range())),
             Payload::ImportSection(s) => ("import".to_string(), range_size(s.range())),
             Payload::TableSection(s) => ("table".to_string(), range_size(s.range())),
@@ -146,7 +143,7 @@ fn section_sizes(prefix: Option<&str>, mut module: &[u8]) -> anyhow::Result<Hash
             Payload::End(_) => break,
             _ => continue,
         };
-        sections.insert(prefix.to_string() + name.as_str(), size.try_into().unwrap());
+        sections.insert(format!("{prefix}{name}"), size.try_into().unwrap());
     }
 
     Ok(sections)
@@ -181,6 +178,11 @@ fn accumulate_contributors(
     let mut iter = dwarf.units();
     while let Some(header) = iter.next()? {
         let unit = dwarf.unit(header)?;
+        let unit_name = unit
+            .name
+            .and_then(|s| s.to_string().ok())
+            .unwrap_or("<unknown compilation unit>")
+            .trim_start_matches('/');
         let mut entries = unit.entries();
         while let Some((_, entry)) = entries.next_dfs()? {
             match entry.tag() {
@@ -193,10 +195,13 @@ fn accumulate_contributors(
 
             let (dir, file) =
                 unpack_file(file, &unit, &dwarf).unwrap_or(("<unknown dir>", "<unknown file>"));
+            let dir = dir.trim_start_matches('/');
             let func_name =
                 unwrap_or_continue!(func_name.string_value(&dwarf.debug_str)).to_string()?;
             let size = unwrap_or_continue!(entry_mapped_size(entry, &unit, &dwarf)?);
-            let key = format!("{prefix}{dir}/{file}/{func_name}");
+            let key = format!(
+                "{prefix}@compilation_unit: {unit_name};@source_file: {dir}/{file};{func_name}"
+            );
             *contributors.entry(key).or_insert(0) += size;
         }
     }
