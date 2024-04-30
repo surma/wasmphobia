@@ -1,4 +1,8 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::{
+    collections::HashMap,
+    ops::{Range, Sub},
+    path::PathBuf,
+};
 
 use clap::Parser;
 use gimli::{EndianSlice, LittleEndian};
@@ -16,15 +20,8 @@ fn main() -> anyhow::Result<()> {
     let dwarf = module.debug.dwarf;
     let dwarf = dwarf.borrow(|v| EndianSlice::new(v.as_slice(), LittleEndian));
 
-    let mut contributors = accumulate_contributors(dwarf)?;
-    let data_sections = module.data.iter().enumerate().map(|(idx, data)| {
-        let name = format!(
-            "/@wasm_binary/data_sections/{}",
-            data.name.clone().unwrap_or_else(|| idx.to_string())
-        );
-        (name, u64::try_from(data.value.len()).unwrap())
-    });
-    contributors.extend(data_sections);
+    let mut contributors = accumulate_contributors(Some("@wasm_binary/sections/code/"), dwarf)?;
+    contributors.extend(section_sizes(Some("@wasm_binary/sections/"), &content)?);
     let keys: Vec<_> = contributors
         .keys()
         .map(|s| s.split('/').collect::<Vec<_>>())
@@ -41,7 +38,8 @@ fn main() -> anyhow::Result<()> {
         .and_then(|s| s.to_str())
         .unwrap_or("<Unknown wasm file>")
         .to_string();
-    options.subtitle = Some("Contribution to the code section per compilation unit".to_string());
+    options.subtitle =
+        Some("Contribution to WebAssembly module size per DWARF compilation unit".to_string());
     options.count_name = "KB".to_string();
     options.notes = "The flamegraph lololol".to_string();
     options.factor = 1.0 / 1000.0;
@@ -54,41 +52,76 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+fn range_size<T: Sub<Output = T>>(r: Range<T>) -> T {
+    r.end - r.start
+}
+
+fn section_sizes(prefix: Option<&str>, mut module: &[u8]) -> anyhow::Result<HashMap<String, u64>> {
+    use wasmparser::{Chunk, Parser, Payload};
+    let prefix = prefix.unwrap_or("");
+    let mut sections: HashMap<String, u64> = HashMap::new();
+    let mut cur = Parser::new(0);
+
+    loop {
+        let Chunk::Parsed { payload, consumed } = cur.parse(module, true)? else {
+            anyhow::bail!("Incomplete wasm file")
+        };
+        module = &module[consumed..];
+
+        let (name, size) = match payload {
+            // Sections for WebAssembly modules
+            Payload::TypeSection(s) => ("types".to_string(), range_size(s.range())),
+            Payload::DataSection(s) => ("data".to_string(), range_size(s.range())),
+            Payload::CustomSection(s) => (format!("custom/{}", s.name()), range_size(s.range())),
+            Payload::FunctionSection(s) => ("function".to_string(), range_size(s.range())),
+            Payload::ImportSection(s) => ("import".to_string(), range_size(s.range())),
+            Payload::TableSection(s) => ("table".to_string(), range_size(s.range())),
+            Payload::MemorySection(s) => ("memory".to_string(), range_size(s.range())),
+            Payload::ExportSection(s) => ("export".to_string(), range_size(s.range())),
+            Payload::GlobalSection(s) => ("global".to_string(), range_size(s.range())),
+            Payload::ElementSection(s) => ("element".to_string(), range_size(s.range())),
+            Payload::UnknownSection { range, .. } => ("<unknown>".to_string(), range_size(range)),
+
+            // Handled by DWARF analysis
+            // Payload::CodeSectionStart { range, .. } => {}
+            Payload::End(_) => break,
+            _ => continue,
+        };
+        sections.insert(prefix.to_string() + name.as_str(), size.try_into().unwrap());
+    }
+
+    Ok(sections)
+}
+
 fn to_inferno_lines(tree: PrefixTreeNode<'_>, contributors: &HashMap<String, u64>) -> Vec<String> {
     let inferno_lines: Vec<_> = tree
         .dfs()
         .into_iter()
-        .map(|entry| {
-            let size = if let Some(subtree) = tree.lookup(&entry) {
-                let key = entry.join("/");
-                total_size(contributors, key, subtree)
-            } else {
-                0
-            };
-            (entry, size)
+        .filter_map(|entry| {
+            let _subtree = tree.lookup(&entry)?;
+            let key = entry.join("/");
+            let size = *contributors.get(&key)?;
+            Some((entry, size))
         })
         .map(|(entry, size)| format!("{} {}", entry.join(";"), size))
         .collect();
     inferno_lines
 }
 
-fn total_size(contributors: &HashMap<String, u64>, key: String, _tree: &PrefixTreeNode<'_>) -> u64 {
-    let size = contributors.get(&key).copied().unwrap_or(0);
-    size
-}
-
 fn accumulate_contributors(
+    prefix: Option<&str>,
     dwarf: gimli::Dwarf<EndianSlice<'_, LittleEndian>>,
 ) -> Result<HashMap<String, u64>, anyhow::Error> {
+    let prefix = prefix.unwrap_or("");
     let mut contributors: HashMap<String, u64> = HashMap::new();
     let mut iter = dwarf.units();
     while let Some(header) = iter.next()? {
         let unit = dwarf.unit(header)?;
-        let name = unit
-            .name
-            .map(|s| std::str::from_utf8(s.slice()).unwrap_or("<Invalid utf8>"))
-            .unwrap_or("<Unknown>")
-            .to_string();
+        let name = prefix.to_string()
+            + unit
+                .name
+                .map(|s| std::str::from_utf8(s.slice()).unwrap_or("<Invalid utf8>"))
+                .unwrap_or("<Unknown>");
 
         let mut size = 0;
         let mut ranges = dwarf.unit_ranges(&unit)?;
