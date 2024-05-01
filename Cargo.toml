@@ -3,6 +3,11 @@ name = "wasmphobia"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "wasmphobia"
+path = "src/main.rs"
+doc = false
+
 [features]
 default = ["cli-args"]
 cli-args = ["dep:clap"]
