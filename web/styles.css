@@ -1,5 +1,6 @@
 @import "@primer/primitives/dist/css/base/size/size.css";
 @import "@primer/primitives/dist/css/base/typography/typography.css";
+@import "@primer/primitives/dist/css/functional/typography/typography.css";
 @import "@primer/primitives/dist/css/functional/themes/dark.css";
 
 html,
@@ -9,6 +10,5 @@ body {
 
 #drop {
   border-radius: 10px;
-  transition: background-color .3s ease-in-out;
+  transition: background-color 0.3s ease-in-out;
 }
-

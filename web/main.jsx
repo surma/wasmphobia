@@ -1,6 +1,6 @@
-import  "./styles.css";
-import {validDrop, invalidDrop} from "./styles.module.css";
+import "./styles.css";
 import renderFlameGraph from "./framegraph.js";
+import { invalidDrop, validDrop } from "./styles.module.css";
 
 if (import.meta.env.DEV) {
   await import("./render.jsx");
@@ -22,7 +22,7 @@ function signalDropValid() {
 function signalDropInvalid() {
   drop.classList.add(invalidDrop);
 }
-function resetDropSignal(){
+function resetDropSignal() {
   drop.classList.remove(validDrop, invalidDrop);
 }
 
@@ -46,7 +46,6 @@ drop.ondragleave = () => resetDropSignal();
 drop.ondragover = ev => {
   ev.preventDefault();
   const container = ev.target.closest("#drop");
-  // console.log({ev});
 
   if (!isValidWasmDrop(ev.dataTransfer)) {
     signalDropInvalid();

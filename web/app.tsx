@@ -1,7 +1,9 @@
+import * as React from "react";
+
 import { FileBinaryIcon } from "@primer/octicons-react";
 import { BaseStyles, Box, Button, Link, PageLayout, ThemeProvider } from "@primer/react";
 import { Blankslate, PageHeader } from "@primer/react/experimental";
-import * as React from "react";
+import Readme from "./readme.jsx";
 
 export default function App() {
   return (
@@ -25,15 +27,18 @@ export default function App() {
                     Analyze a WebAssembly file
                   </Blankslate.PrimaryAction>
                 </div>
-                {false && <Blankslate.SecondaryAction>
-                  ???
-                </Blankslate.SecondaryAction>}
+                {false && (
+                  <Blankslate.SecondaryAction>
+                    ???
+                  </Blankslate.SecondaryAction>
+                )}
               </Blankslate>
+              <Readme />
             </div>
           </PageLayout.Content>
           <PageLayout.Footer>
-              Made with 🤦‍♂️ by <Link href="https://x.com/dassurma" target="_blank">Surma</Link>. 
-              Source code on <Link href="https://github.com/surma/wasmphobia" target="_blank">GitHub</Link>. 
+            Made with 🤦‍♂️ by <Link href="https://x.com/dassurma" target="_blank">Surma</Link>. Source code on{" "}
+            <Link href="https://github.com/surma/wasmphobia" target="_blank">GitHub</Link>.
           </PageLayout.Footer>
         </PageLayout>
       </BaseStyles>

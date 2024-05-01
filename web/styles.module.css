@@ -5,3 +5,16 @@
 .invalid-drop {
   background-color: var(--bgColor-danger-muted);
 }
+
+.readme {
+  font-family: var(--fontStack-system);
+  color: var(--fgColor-default);
+}
+
+.readme pre {
+  font-family: var(--fontStack-monospace);
+}
+
+.readme code {
+  font-family: var(--fontStack-monospace);
+}

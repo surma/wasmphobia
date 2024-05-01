@@ -4,8 +4,8 @@ export default defineConfig({
   root: new URL("./web", import.meta.url).pathname,
   css: {
     modules: {
-      localsConvention: "camelCase"
-    }
+      localsConvention: "camelCase",
+    },
   },
   build: {
     target: "esnext",
