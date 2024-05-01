@@ -1,4 +1,5 @@
-import "./styles.css";
+import  "./styles.css";
+import {validDrop, invalidDrop} from "./styles.module.css";
 import renderFlameGraph from "./framegraph.js";
 
 if (import.meta.env.DEV) {
@@ -15,6 +16,16 @@ async function process(file) {
 
 const { fileselect, drop } = document.all;
 
+function signalDropValid() {
+  drop.classList.add(validDrop);
+}
+function signalDropInvalid() {
+  drop.classList.add(invalidDrop);
+}
+function resetDropSignal(){
+  drop.classList.remove(validDrop, invalidDrop);
+}
+
 fileselect.onclick = ev => {
   const f = document.createElement("input");
   f.type = "file";
@@ -30,9 +41,7 @@ function isValidWasmDrop(dt) {
   return item;
 }
 
-drop.ondragleave = ev => {
-  drop.style.backgroundColor = "initial";
-};
+drop.ondragleave = () => resetDropSignal();
 
 drop.ondragover = ev => {
   ev.preventDefault();
@@ -40,14 +49,14 @@ drop.ondragover = ev => {
   // console.log({ev});
 
   if (!isValidWasmDrop(ev.dataTransfer)) {
-    drop.style.backgroundColor = "red";
+    signalDropInvalid();
     return;
   }
-  drop.style.backgroundColor = "green";
+  signalDropValid();
 };
 drop.ondrop = ev => {
   ev.preventDefault();
-  drop.style.backgroundColor = "initial";
+  resetDropSignal();
   if (!isValidWasmDrop(ev.dataTransfer)) return;
   const file = ev.dataTransfer.files[0];
   process(file);

@@ -6,3 +6,9 @@ html,
 body {
   background: var(--bgColor-default);
 }
+
+#drop {
+  border-radius: 10px;
+  transition: background-color .3s ease-in-out;
+}
+

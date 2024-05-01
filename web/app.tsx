@@ -1,5 +1,5 @@
 import { FileBinaryIcon } from "@primer/octicons-react";
-import { BaseStyles, Box, Button, PageLayout, ThemeProvider } from "@primer/react";
+import { BaseStyles, Box, Button, Link, PageLayout, ThemeProvider } from "@primer/react";
 import { Blankslate, PageHeader } from "@primer/react/experimental";
 import * as React from "react";
 
@@ -25,14 +25,15 @@ export default function App() {
                     Analyze a WebAssembly file
                   </Blankslate.PrimaryAction>
                 </div>
-                <Blankslate.SecondaryAction>
+                {false && <Blankslate.SecondaryAction>
                   ???
-                </Blankslate.SecondaryAction>
+                </Blankslate.SecondaryAction>}
               </Blankslate>
             </div>
           </PageLayout.Content>
           <PageLayout.Footer>
-            Footer
+              Made with 🤦‍♂️ by <Link href="https://x.com/dassurma" target="_blank">Surma</Link>. 
+              Source code on <Link href="https://github.com/surma/wasmphobia" target="_blank">GitHub</Link>. 
           </PageLayout.Footer>
         </PageLayout>
       </BaseStyles>
