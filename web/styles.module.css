@@ -1,0 +1,7 @@
+.valid-drop {
+  background-color: var(--bgColor-success-muted);
+}
+
+.invalid-drop {
+  background-color: var(--bgColor-danger-muted);
+}
