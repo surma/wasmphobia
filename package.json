@@ -14,6 +14,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@bjorn3/browser_wasi_shim": "^0.3.0",
-    "vite": "^5.2.10"
+    "vite": "^5.2.10",
+    "wasm-opt": "^1.4.0"
   }
 }
