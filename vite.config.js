@@ -3,8 +3,9 @@ import { defineConfig } from "vite";
 export default defineConfig({
   root: new URL("./web", import.meta.url).pathname,
   build: {
+    target: "esnext",
     outDir: new URL("./dist", import.meta.url).pathname,
-    emptyOutDir: true,
+    emptyOutDir: false,
   },
   resolve: {
     alias: {
@@ -12,7 +13,7 @@ export default defineConfig({
       "react-dom": "preact/compat",
     },
   },
-  esbuild: {
-    jsxInject: `import * as React from "react";`,
+  ssr: {
+    noExternal: true,
   },
 });

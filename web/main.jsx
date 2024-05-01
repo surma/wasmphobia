@@ -1,55 +1,53 @@
-import { BaseStyles, ThemeProvider } from "@primer/react";
-
 import renderFlameGraph from "./framegraph.js";
 
-import { FileBinaryIcon } from "@primer/octicons-react";
-import { Box, Button, PageLayout } from "@primer/react";
-import { Blankslate, PageHeader } from "@primer/react/experimental";
-
-function Placeholder({ label }) {
-  return <Box>{label}</Box>;
+if (!import.meta.env.SSR) {
+  await import("./render.jsx");
 }
 
-function App() {
-  return (
-    <ThemeProvider>
-      <BaseStyles>
-        <PageLayout>
-          <PageLayout.Content>
-            <Blankslate spacious>
-              <Blankslate.Visual>
-                <FileBinaryIcon size={"medium"} />
-              </Blankslate.Visual>
-              <Blankslate.Heading as={"h1"}>Wasmphobia</Blankslate.Heading>
-              <Blankslate.Description>
-                Drop a WebAssembly (<code>.wasm</code>) on this page to get a breakdown of what is contained within. If
-                the binary contains DWARF debugging symbols, they will be used (on a best-effort basis) to break down
-                the file size by source code files.
-              </Blankslate.Description>
-              <Blankslate.PrimaryAction>
-                Analyze a WebAssembly file
-              </Blankslate.PrimaryAction>
-              <Blankslate.SecondaryAction>
-                ???
-              </Blankslate.SecondaryAction>
-            </Blankslate>
-          </PageLayout.Content>
-          <PageLayout.Footer>
-            <Placeholder label="Footer" />
-          </PageLayout.Footer>
-        </PageLayout>
-      </BaseStyles>
-    </ThemeProvider>
-  );
-}
-
-React.render(<App />, document.body);
-
-document.all.file.onchange = async ev => {
-  const file = ev.target.files[0];
+async function process(file) {
   const buf = await new Response(file).arrayBuffer();
   const svg = await renderFlameGraph(buf);
   const svgFile = new File([svg], "flamegraph.svg", { type: "image/svg+xml" });
   const url = URL.createObjectURL(svgFile);
   location.href = url;
+}
+
+const { fileselect, drop } = document.all;
+
+fileselect.onclick = ev => {
+  const f = document.createElement("input");
+  f.type = "file";
+  f.onchange = () => process(f.files[0]);
+  f.click();
+};
+
+function isValidWasmDrop(dt) {
+  if (dt.items.length != 1) return null;
+  const item = dt.items[0];
+  if (item.kind != "file") return null;
+  if (item.type != "application/wasm") return null;
+  return item;
+}
+
+drop.ondragleave = ev => {
+  drop.style.backgroundColor = "initial";
+};
+
+drop.ondragover = ev => {
+  ev.preventDefault();
+  const container = ev.target.closest("#drop");
+  // console.log({ev});
+
+  if (!isValidWasmDrop(ev.dataTransfer)) {
+    drop.style.backgroundColor = "red";
+    return;
+  }
+  drop.style.backgroundColor = "green";
+};
+drop.ondrop = ev => {
+  ev.preventDefault();
+  drop.style.backgroundColor = "initial";
+  if (!isValidWasmDrop(ev.dataTransfer)) return;
+  const file = ev.dataTransfer.files[0];
+  process(file);
 };

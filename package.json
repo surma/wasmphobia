@@ -7,7 +7,10 @@
     "dev": "vite",
     "build:rust": "cargo build --no-default-features -r --target wasm32-wasi",
     "build:opt": "wasm-opt -O3 --strip target/wasm32-wasi/release/wasmphobia.wasm -o target/wasm32-wasi/release/wasmphobia.opt.wasm",
-    "build:web": "vite build",
+    "build:web:static": "vite build",
+    "build:web:ssr-script": "vite build --ssr ssr.tsx",
+    "build:web:ssr": "node dist/ssr.js",
+    "build:web": "npm run build:web:static && npm run build:web:ssr-script && npm run build:web:ssr",
     "build": "npm run build:rust && npm run build:opt && npm run build:web"
   },
   "author": "Surma <surma@surma.dev>",
@@ -18,6 +21,7 @@
     "@primer/primitives": "^8.1.0",
     "@primer/react": "^36.16.0",
     "preact": "^10.21.0",
+    "preact-render-to-string": "^6.4.2",
     "styled-components": "^5.3.11",
     "vite": "^5.2.10",
     "wasm-opt": "^1.4.0"
