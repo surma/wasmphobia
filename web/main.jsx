@@ -1,6 +1,7 @@
+import "./styles.css";
 import renderFlameGraph from "./framegraph.js";
 
-if (!import.meta.env.SSR) {
+if (import.meta.env.DEV) {
   await import("./render.jsx");
 }
 
