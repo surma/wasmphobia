@@ -14,6 +14,11 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@bjorn3/browser_wasi_shim": "^0.3.0",
+    "@primer/octicons-react": "^19.9.0",
+    "@primer/primitives": "^8.1.0",
+    "@primer/react": "^36.16.0",
+    "preact": "^10.21.0",
+    "styled-components": "^5.3.11",
     "vite": "^5.2.10",
     "wasm-opt": "^1.4.0"
   }

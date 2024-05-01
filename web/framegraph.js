@@ -1,6 +1,6 @@
 import { ConsoleStdout, File as WasiFile, OpenFile, WASI } from "@bjorn3/browser_wasi_shim";
 
-async function renderFlameGraph(data) {
+export default async function renderFlameGraph(data) {
   const input = new WasiFile(data);
   const output = new WasiFile();
   const error = new WasiFile();
@@ -24,12 +24,3 @@ async function renderFlameGraph(data) {
   }
   return new TextDecoder().decode(output.data);
 }
-
-document.all.file.onchange = async ev => {
-  const file = ev.target.files[0];
-  const buf = await new Response(file).arrayBuffer();
-  const svg = await renderFlameGraph(buf);
-  const svgFile = new File([svg], "flamegraph.svg", { type: "image/svg+xml" });
-  const url = URL.createObjectURL(svgFile);
-  location.href = url;
-};
