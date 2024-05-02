@@ -17,6 +17,7 @@ export default function DropZone() {
           m: 4,
           display: "flex",
           flexDirection: "column",
+          textAlign: "center",
         }}
       >
         <Heading as="h2" sx={{ p: 3, display: "flex", justifyContent: "center", alignItems: "center" }}>
@@ -25,7 +26,7 @@ export default function DropZone() {
           </span>
         </Heading>
         <Button className={styles.fileSelect}>
-          ... or select a file
+          ... or select one
         </Button>
       </Box>
     </>

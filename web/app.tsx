@@ -11,12 +11,12 @@ export default function App() {
     <ThemeProvider colorMode="dark">
       <BaseStyles>
         <DropStyleProvider>
-          <PageLayout containerWidth="medium" sx={{ backgroundColor: "canvas.default", height: "100vh" }}>
+          <PageLayout containerWidth="medium" sx={{ backgroundColor: "canvas.default", minHeight: "100vh" }}>
             <PageLayout.Content>
               <DropZone />
               <Readme />
             </PageLayout.Content>
-            <PageLayout.Footer sx={{ position: "absolute", bottom: 0, padding: 2 }}>
+            <PageLayout.Footer sx={{ padding: 2 }}>
               <Footer />
             </PageLayout.Footer>
           </PageLayout>
