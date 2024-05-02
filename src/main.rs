@@ -5,7 +5,7 @@ use std::{
     path::PathBuf,
 };
 
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
 use fallible_iterator::FallibleIterator;
 use gimli::{read::AttributeValue, DebuggingInformationEntry, EndianSlice, LittleEndian, Unit};
 
@@ -38,15 +38,17 @@ fn main() -> anyhow::Result<()> {
         _ => read_stdin()?,
     };
 
-    let module = walrus::Module::from_buffer(&input_data)?;
+    let module = walrus::Module::from_buffer(&input_data).context("Parsing WebAssembly")?;
     let dwarf = module.debug.dwarf;
     let dwarf = dwarf.borrow(|v| EndianSlice::new(v.as_slice(), LittleEndian));
 
     const WASM_SECTION_PREFIX: &str = "@wasm_binary_module;@section: ";
     let wasm_code_section = format!("{WASM_SECTION_PREFIX}code");
-    let mut contributors = accumulate_contributors(Some(&format!("{wasm_code_section};")), dwarf)?;
+    let mut contributors = accumulate_contributors(Some(&format!("{wasm_code_section};")), dwarf)
+        .context("Analyzing DWARF data")?;
 
-    let mut wasm_section_sizes = section_sizes(Some(WASM_SECTION_PREFIX), &input_data)?;
+    let mut wasm_section_sizes =
+        section_sizes(Some(WASM_SECTION_PREFIX), &input_data).context("Analyzing Wasm sections")?;
     let mapped_wasm_code_size: u64 = contributors.values().sum();
     let total_code_size = wasm_section_sizes
         .remove(&wasm_code_section)
@@ -65,7 +67,7 @@ fn main() -> anyhow::Result<()> {
 
     let options = create_flamegraph_config(args);
 
-    write_flamegraph(contributors, options, output)?;
+    write_flamegraph(contributors, options, output).context("Rendering flame graph")?;
 
     Ok(())
 }

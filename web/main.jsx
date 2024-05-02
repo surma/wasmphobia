@@ -10,11 +10,15 @@ const dropZone = document.body;
 const fileSelect = document.querySelector(`.${styles.fileSelect}`);
 
 async function process(file) {
-  const buf = await new Response(file).arrayBuffer();
-  const svg = await renderFlameGraph(buf);
-  const svgFile = new File([svg], "flamegraph.svg", { type: "image/svg+xml" });
-  const url = URL.createObjectURL(svgFile);
-  location.href = url;
+  try {
+    const buf = await new Response(file).arrayBuffer();
+    const svg = await renderFlameGraph(buf);
+    const svgFile = new File([svg], "flamegraph.svg", { type: "image/svg+xml" });
+    const url = URL.createObjectURL(svgFile);
+    location.href = url;
+  } catch (e) {
+    showError(e.message);
+  }
 }
 
 function signalDropValid() {
@@ -55,7 +59,18 @@ dropZone.ondragover = ev => {
 dropZone.ondrop = ev => {
   ev.preventDefault();
   resetDropSignal();
-  if (!isValidWasmDrop(ev.dataTransfer)) return;
+  if (!isValidWasmDrop(ev.dataTransfer)) {
+    showError("Unsupported file format");
+    return;
+  }
   const file = ev.dataTransfer.files[0];
   process(file);
 };
+
+const errorBar = document.querySelector(`.${styles.errorBar}`);
+const errorText = document.querySelector(`.${styles.errorText}`);
+
+function showError(text) {
+  errorText.textContent = text;
+  errorBar.hidden = false;
+}

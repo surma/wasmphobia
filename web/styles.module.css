@@ -19,3 +19,8 @@
 .drop-invalid {
   background-color: var(--drop-invalid-bg-color);
 }
+
+.error-text {
+}
+.error-bar {
+}

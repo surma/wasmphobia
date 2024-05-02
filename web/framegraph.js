@@ -20,7 +20,7 @@ export default async function renderFlameGraph(data) {
   const ret = wasi.start({ exports: instance.exports });
   if (ret != 0) {
     const errorMessage = new TextDecoder().decode(error.data);
-    throw Error("Could not render SVG:" + errorMessage);
+    throw Error("Could not create flamegraph: " + errorMessage);
   }
   return new TextDecoder().decode(output.data);
 }
