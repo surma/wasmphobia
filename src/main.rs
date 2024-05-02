@@ -9,23 +9,52 @@ use anyhow::{anyhow, Context};
 use fallible_iterator::FallibleIterator;
 use gimli::{read::AttributeValue, DebuggingInformationEntry, EndianSlice, LittleEndian, Unit};
 
-#[cfg(feature = "cli-args")]
 use clap::Parser;
 
-#[derive(Default, Debug)]
-#[cfg_attr(feature = "cli-args", derive(Parser))]
-#[cfg_attr(feature = "cli-args", command(version))]
+#[derive(Clone, Debug, Parser)]
+#[command(version)]
 struct Args {
-    #[cfg_attr(feature = "cli-args", arg(short, long))]
+    #[arg(short, long)]
     input: Option<PathBuf>,
-    #[cfg_attr(feature = "cli-args", arg(short, long))]
+    #[arg(short, long)]
     output: Option<PathBuf>,
+
+    #[arg(long, default_value_t = false)]
+    /// Don't group by DWARF compilation units
+    no_compilation_units: bool,
+
+    #[arg(long, default_value_t = false)]
+    /// Split file paths at each folder in the flame graph
+    split_paths: bool,
+
+    #[arg(long)]
+    /// Title for the flame graph (default: input file name)
+    title: Option<String>,
 }
 
-#[cfg(not(feature = "cli-args"))]
-impl Args {
-    fn parse() -> Self {
-        Default::default()
+impl Into<DwarfAnalysisOpts> for Args {
+    fn into(self) -> DwarfAnalysisOpts {
+        DwarfAnalysisOpts {
+            prefix: None,
+            compilation_units: !self.no_compilation_units,
+            split_paths: self.split_paths,
+        }
+    }
+}
+
+impl Into<inferno::flamegraph::Options<'static>> for Args {
+    fn into(self) -> inferno::flamegraph::Options<'static> {
+        let mut options = inferno::flamegraph::Options::default();
+        options.title = self
+            .title
+            .or_else(|| Some(self.input.as_ref()?.file_name()?.to_str()?.to_string()))
+            .unwrap_or("<Unknown wasm file>".to_string());
+        options.subtitle =
+            Some("Contribution to WebAssembly module size per DWARF compilation unit".to_string());
+        options.count_name = "KB".to_string();
+        options.factor = 1.0 / 1000.0;
+        options.name_type = "".to_string();
+        options
     }
 }
 
@@ -44,8 +73,14 @@ fn main() -> anyhow::Result<()> {
 
     const WASM_SECTION_PREFIX: &str = "@wasm_binary_module;@section: ";
     let wasm_code_section = format!("{WASM_SECTION_PREFIX}code");
-    let mut contributors = accumulate_contributors(Some(&format!("{wasm_code_section};")), dwarf)
-        .context("Analyzing DWARF data")?;
+    let mut contributors = analyze_dwarf(
+        dwarf,
+        &DwarfAnalysisOpts {
+            prefix: Some(wasm_code_section.clone()),
+            ..args.clone().into()
+        },
+    )
+    .context("Analyzing DWARF data")?;
 
     let mut wasm_section_sizes =
         section_sizes(Some(WASM_SECTION_PREFIX), &input_data).context("Analyzing Wasm sections")?;
@@ -65,9 +100,7 @@ fn main() -> anyhow::Result<()> {
         _ => Box::new(std::io::stdout()),
     };
 
-    let options = create_flamegraph_config(args);
-
-    write_flamegraph(contributors, options, output).context("Rendering flame graph")?;
+    write_flamegraph(contributors, args.into(), output).context("Rendering flame graph")?;
 
     Ok(())
 }
@@ -87,23 +120,6 @@ fn write_flamegraph(
         &mut output,
     )?;
     Ok(())
-}
-
-fn create_flamegraph_config(args: Args) -> inferno::flamegraph::Options<'static> {
-    let mut options = inferno::flamegraph::Options::default();
-    options.title = args
-        .input
-        .as_ref()
-        .and_then(|s| s.file_name())
-        .and_then(|s| s.to_str())
-        .unwrap_or("<Unknown wasm file>")
-        .to_string();
-    options.subtitle =
-        Some("Contribution to WebAssembly module size per DWARF compilation unit".to_string());
-    options.count_name = "KB".to_string();
-    options.factor = 1.0 / 1000.0;
-    options.name_type = "".to_string();
-    options
 }
 
 fn read_stdin() -> std::io::Result<Vec<u8>> {
@@ -171,11 +187,17 @@ fn unpack_size<R: gimli::Reader>(low: &AttributeValue<R>, high: &AttributeValue<
     }
 }
 
-fn accumulate_contributors(
-    prefix: Option<&str>,
+#[derive(Debug, Clone, Default)]
+struct DwarfAnalysisOpts {
+    prefix: Option<String>,
+    compilation_units: bool,
+    split_paths: bool,
+}
+
+fn analyze_dwarf(
     dwarf: gimli::Dwarf<EndianSlice<'_, LittleEndian>>,
+    opts: &DwarfAnalysisOpts,
 ) -> Result<HashMap<String, u64>, anyhow::Error> {
-    let prefix = prefix.unwrap_or("");
     let mut contributors: HashMap<String, u64> = HashMap::new();
     let mut iter = dwarf.units();
     while let Some(header) = iter.next()? {
@@ -197,13 +219,24 @@ fn accumulate_contributors(
 
             let (dir, file) =
                 unpack_file(file, &unit, &dwarf).unwrap_or(("<unknown dir>", "<unknown file>"));
-            let dir = dir.trim_start_matches('/');
             let func_name =
                 unwrap_or_continue!(func_name.string_value(&dwarf.debug_str)).to_string()?;
             let size = unwrap_or_continue!(entry_mapped_size(entry, &unit, &dwarf)?);
-            let key = format!(
-                "{prefix}@compilation_unit: {unit_name};@source_file: {dir}/{file};{func_name}"
-            );
+            let mut key = vec![];
+            if let Some(prefix) = &opts.prefix {
+                key.push(prefix.to_string());
+            }
+            if opts.compilation_units {
+                key.push(format!("@compilation_unit: {unit_name}"))
+            }
+            if opts.split_paths {
+                key.push("@source_files".into());
+                key.extend(dir.split('/').map(Into::into));
+                key.push(file.into())
+            } else {
+                key.push(format!("@source_file: {dir}/{file};"));
+            };
+            let key = key.join(";");
             *contributors.entry(key).or_insert(0) += size;
         }
     }

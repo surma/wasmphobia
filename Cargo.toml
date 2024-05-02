@@ -8,10 +8,6 @@ name = "wasmphobia"
 path = "src/main.rs"
 doc = false
 
-[features]
-default = ["cli-args"]
-cli-args = ["dep:clap"]
-
 [profile.release]
 debug = true
 lto = true
@@ -19,7 +15,7 @@ codegen-units = 1
 
 [dependencies]
 anyhow = "1.0.82"
-clap = { version = "4.5.4", features = ["derive"], optional = true }
+clap = { version = "4.5.4", features = ["derive"] }
 fallible-iterator = "0.2.0"
 gimli = "0.26.2"
 inferno = { version = "0.11.19", default-features = false, features = ["nameattr"] }
