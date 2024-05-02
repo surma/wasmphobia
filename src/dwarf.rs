@@ -45,6 +45,9 @@ pub fn analyze_dwarf(
             .trim_start_matches('/');
         let mut entries = unit.entries();
         while let Some((_, entry)) = entries.next_dfs()? {
+            if entry.tag() == gimli::DW_TAG_compile_unit {
+                continue;
+            }
             let file = entry.attr_value(gimli::DW_AT_decl_file)?;
             let (dir, file) =
                 unpack_file(file, &unit, &dwarf).unwrap_or(("<unknown dir>", "<unknown file>"));
@@ -65,6 +68,7 @@ pub fn analyze_dwarf(
             if opts.split_paths {
                 key.push("@source_files".into());
                 key.extend(dir.split('/').map(Into::into));
+                key.push(file.into());
             } else {
                 key.push(format!("@source_file: {dir}/{file}"));
             };

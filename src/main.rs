@@ -22,8 +22,8 @@ struct Args {
     output: Option<PathBuf>,
 
     #[arg(long, default_value_t = false)]
-    /// Don't group by DWARF compilation units
-    no_compilation_units: bool,
+    /// Group by DWARF compilation units
+    compilation_units: bool,
 
     #[arg(long, default_value_t = false)]
     /// Split file paths at each folder in the flame graph
@@ -38,18 +38,18 @@ impl From<Args> for DwarfAnalysisOpts {
     fn from(val: Args) -> Self {
         DwarfAnalysisOpts {
             prefix: None,
-            compilation_units: !val.no_compilation_units,
+            compilation_units: val.compilation_units,
             split_paths: val.split_paths,
         }
     }
 }
 
-impl Into<inferno::flamegraph::Options<'static>> for Args {
-    fn into(self) -> inferno::flamegraph::Options<'static> {
+impl From<Args> for inferno::flamegraph::Options<'static> {
+    fn from(value: Args) -> Self {
         let mut options = inferno::flamegraph::Options::default();
-        options.title = self
+        options.title = value
             .title
-            .or_else(|| Some(self.input.as_ref()?.file_name()?.to_str()?.to_string()))
+            .or_else(|| Some(value.input.as_ref()?.file_name()?.to_str()?.to_string()))
             .unwrap_or("<Unknown wasm file>".to_string());
         options.subtitle =
             Some("Contribution to WebAssembly module size per DWARF compilation unit".to_string());
