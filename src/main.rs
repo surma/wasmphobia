@@ -75,6 +75,7 @@ fn main() -> anyhow::Result<()> {
 
     const WASM_SECTION_PREFIX: &str = "@wasm_binary_module;@section: ";
     let wasm_code_section = format!("{WASM_SECTION_PREFIX}code");
+
     let mut contributors = dwarf::analyze_dwarf(
         dwarf,
         &DwarfAnalysisOpts {
