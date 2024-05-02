@@ -1,10 +1,13 @@
-import "./styles.css";
 import renderFlameGraph from "./framegraph.js";
-import { invalidDrop, validDrop } from "./styles.module.css";
+import * as styles from "./styles.module.css";
 
 if (import.meta.env.DEV) {
   await import("./render.jsx");
 }
+
+const dropSignal = document.querySelector(`.${styles.dropSignal}`);
+const dropZone = document.body;
+const fileSelect = document.querySelector(`.${styles.fileSelect}`);
 
 async function process(file) {
   const buf = await new Response(file).arrayBuffer();
@@ -14,19 +17,17 @@ async function process(file) {
   location.href = url;
 }
 
-const { fileselect, drop } = document.all;
-
 function signalDropValid() {
-  drop.classList.add(validDrop);
+  dropSignal.classList.add(styles.dropValid);
 }
 function signalDropInvalid() {
-  drop.classList.add(invalidDrop);
+  dropSignal.classList.add(styles.dropInvalid);
 }
 function resetDropSignal() {
-  drop.classList.remove(validDrop, invalidDrop);
+  dropSignal.classList.remove(styles.dropValid, styles.dropInvalid);
 }
 
-fileselect.onclick = ev => {
+fileSelect.onclick = () => {
   const f = document.createElement("input");
   f.type = "file";
   f.onchange = () => process(f.files[0]);
@@ -41,19 +42,17 @@ function isValidWasmDrop(dt) {
   return item;
 }
 
-drop.ondragleave = () => resetDropSignal();
+dropZone.ondragleave = () => resetDropSignal();
 
-drop.ondragover = ev => {
+dropZone.ondragover = ev => {
   ev.preventDefault();
-  const container = ev.target.closest("#drop");
-
   if (!isValidWasmDrop(ev.dataTransfer)) {
     signalDropInvalid();
     return;
   }
   signalDropValid();
 };
-drop.ondrop = ev => {
+dropZone.ondrop = ev => {
   ev.preventDefault();
   resetDropSignal();
   if (!isValidWasmDrop(ev.dataTransfer)) return;

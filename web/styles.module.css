@@ -1,20 +1,21 @@
-.valid-drop {
-  background-color: var(--bgColor-success-muted);
+.drop-signal {
+  transition: background-color 0.3s ease-in-out;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
 }
 
-.invalid-drop {
-  background-color: var(--bgColor-danger-muted);
+.file-select {
+  position: static;
 }
 
-.readme {
-  font-family: var(--fontStack-system);
-  color: var(--fgColor-default);
+.drop-valid {
+  background-color: var(--drop-valid-bg-color);
 }
 
-.readme pre {
-  font-family: var(--fontStack-monospace);
-}
-
-.readme code {
-  font-family: var(--fontStack-monospace);
+.drop-invalid {
+  background-color: var(--drop-invalid-bg-color);
 }

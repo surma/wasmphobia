@@ -11,6 +11,7 @@ export default defineConfig({
     target: "esnext",
     outDir: new URL("./dist", import.meta.url).pathname,
     emptyOutDir: false,
+    minify: "esbuild",
   },
   resolve: {
     alias: {

@@ -1,46 +1,26 @@
 import * as React from "react";
 
-import { FileBinaryIcon } from "@primer/octicons-react";
-import { BaseStyles, Box, Button, Link, PageLayout, ThemeProvider } from "@primer/react";
-import { Blankslate, PageHeader } from "@primer/react/experimental";
+import { BaseStyles, PageLayout, ThemeProvider } from "@primer/react";
+import DropStyleProvider from "./drop-style-provider.jsx";
+import DropZone from "./drop-zone.js";
+import Footer from "./footer.js";
 import Readme from "./readme.jsx";
 
 export default function App() {
   return (
-    <ThemeProvider>
+    <ThemeProvider colorMode="dark">
       <BaseStyles>
-        <PageLayout>
-          <PageLayout.Content>
-            <div id="drop">
-              <Blankslate spacious>
-                <Blankslate.Visual>
-                  <FileBinaryIcon size={"medium"} />
-                </Blankslate.Visual>
-                <Blankslate.Heading as={"h1"}>Wasmphobia</Blankslate.Heading>
-                <Blankslate.Description>
-                  Drop a WebAssembly (<code>.wasm</code>) on this page to get a breakdown of what is contained within.
-                  If the binary contains DWARF debugging symbols, they will be used (on a best-effort basis) to break
-                  down the file size by source code files.
-                </Blankslate.Description>
-                <div id="fileselect">
-                  <Blankslate.PrimaryAction>
-                    Analyze a WebAssembly file
-                  </Blankslate.PrimaryAction>
-                </div>
-                {false && (
-                  <Blankslate.SecondaryAction>
-                    ???
-                  </Blankslate.SecondaryAction>
-                )}
-              </Blankslate>
+        <DropStyleProvider>
+          <PageLayout containerWidth="medium" sx={{ backgroundColor: "canvas.default", height: "100vh" }}>
+            <PageLayout.Content>
+              <DropZone />
               <Readme />
-            </div>
-          </PageLayout.Content>
-          <PageLayout.Footer>
-            Made with 🤦‍♂️ by <Link href="https://x.com/dassurma" target="_blank">Surma</Link>. Source code on{" "}
-            <Link href="https://github.com/surma/wasmphobia" target="_blank">GitHub</Link>.
-          </PageLayout.Footer>
-        </PageLayout>
+            </PageLayout.Content>
+            <PageLayout.Footer sx={{ position: "absolute", bottom: 0, padding: 2 }}>
+              <Footer />
+            </PageLayout.Footer>
+          </PageLayout>
+        </DropStyleProvider>
       </BaseStyles>
     </ThemeProvider>
   );
