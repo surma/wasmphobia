@@ -90,15 +90,21 @@ fn main() -> anyhow::Result<()> {
     let total_code_size = wasm_section_sizes
         .remove("code")
         .ok_or_else(|| anyhow!("Wasm module without a code section"))?;
-    let unmapped_wasm_code_size = total_code_size - mapped_wasm_code_size;
+    if let Some(unmapped_wasm_code_size) = total_code_size.checked_sub(mapped_wasm_code_size) {
+        contributors.insert(
+            format!("{wasm_code_section};<unmapped>"),
+            unmapped_wasm_code_size,
+        );
+    } else {
+        eprintln!(
+            "[Warning] Mapped code regions add up to more bytes than the Wasm's code section"
+        );
+    }
+
     contributors.extend(
         wasm_section_sizes
             .into_iter()
             .map(|(key, val)| (format!("{WASM_SECTION_PREFIX}{key}"), val)),
-    );
-    contributors.insert(
-        format!("{wasm_code_section};<unmapped>"),
-        unmapped_wasm_code_size,
     );
 
     let output: Box<dyn Write> = match &args.output {

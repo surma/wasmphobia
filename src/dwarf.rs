@@ -43,11 +43,15 @@ pub fn analyze_dwarf(
             .and_then(|s| s.to_string().ok())
             .unwrap_or("<unknown compilation unit>")
             .trim_start_matches('/');
+        let unit_dir = unit.comp_dir.and_then(|c| c.to_string().ok());
+
         let mut entries = unit.entries();
         while let Some((_, entry)) = entries.next_dfs()? {
             if entry.tag() == gimli::DW_TAG_compile_unit {
                 continue;
             }
+            let size = unwrap_or_continue!(entry_mapped_size(entry, &unit, &dwarf)?);
+
             let file = entry.attr_value(gimli::DW_AT_decl_file)?;
             let (dir, file) =
                 unpack_file(file, &unit, &dwarf).unwrap_or(("<unknown dir>", "<unknown file>"));
@@ -56,7 +60,11 @@ pub fn analyze_dwarf(
             let entry_name =
                 unwrap_or_continue!(entry_name.string_value(&dwarf.debug_str)).to_string()?;
 
-            let size = unwrap_or_continue!(entry_mapped_size(entry, &unit, &dwarf)?);
+            let dir = if !dir.starts_with('/') && !dir.starts_with('<') {
+                unit_dir.unwrap_or("").to_string() + dir
+            } else {
+                dir.to_string()
+            };
 
             let mut key = vec![];
             if let Some(prefix) = &opts.prefix {
@@ -104,7 +112,6 @@ fn entry_mapped_size<R: gimli::Reader>(
 ) -> anyhow::Result<Option<u64>> {
     // Deal with ranges first, as compilation units can have a low_pc _and_ a ranges attribute.
     if let Some(ranges) = entry.attr_value(gimli::DW_AT_ranges)? {
-        // ranges.offset_value()
         let AttributeValue::RangeListsRef(list_ref) = ranges else {
             return Ok(None);
         };
@@ -130,15 +137,9 @@ fn unpack_file<'i>(
     };
     let header = unit.line_program.as_ref()?.header();
     let file = header.file(file_index)?;
-    let dir = file
-        .directory(header)?
-        .string_value(&dwarf.debug_str)?
-        .to_string()
-        .ok()?;
-    let name = file
-        .path_name()
-        .string_value(&dwarf.debug_str)?
-        .to_string()
-        .ok()?;
-    Some((dir, name))
+    let dir = file.directory(header)?;
+    let dir = dir.string_value(&dwarf.debug_str)?.to_string().ok()?;
+    let file_name = file.path_name();
+    let file_name = file_name.string_value(&dwarf.debug_str)?.to_string().ok()?;
+    Some((dir, file_name))
 }
