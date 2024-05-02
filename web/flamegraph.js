@@ -1,10 +1,12 @@
 import { ConsoleStdout, File as WasiFile, OpenFile, WASI } from "@bjorn3/browser_wasi_shim";
 
-export default async function renderFlameGraph(data) {
+export default async function renderFlameGraph(file) {
+  const fileName = file.name;
+  const data = await new Response(file).arrayBuffer();
   const input = new WasiFile(data);
   const output = new WasiFile();
   const error = new WasiFile();
-  const wasi = new WASI([], [], [
+  const wasi = new WASI(["__", `--title=${fileName}`, "--split-paths"], [], [
     new OpenFile(input),
     new OpenFile(output),
     new OpenFile(error),
