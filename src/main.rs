@@ -91,7 +91,11 @@ fn main() -> anyhow::Result<()> {
         .remove("code")
         .ok_or_else(|| anyhow!("Wasm module without a code section"))?;
     let unmapped_wasm_code_size = total_code_size - mapped_wasm_code_size;
-    contributors.extend(wasm_section_sizes);
+    contributors.extend(
+        wasm_section_sizes
+            .into_iter()
+            .map(|(key, val)| (format!("{WASM_SECTION_PREFIX}{key}"), val)),
+    );
     contributors.insert(
         format!("{wasm_code_section};<unmapped>"),
         unmapped_wasm_code_size,
