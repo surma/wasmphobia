@@ -70,7 +70,7 @@ pub fn analyze_dwarf(
             if opts.compilation_units {
                 key.push(format!("@compilation_unit: {unit_name}"))
             }
-            let (dir, file, entry_name, size) =
+            let (dir, file, _entry_name, size) =
                 unwrap_or_continue!(process_die(entry, &unit, &dwarf)?);
             if opts.split_paths {
                 key.push("@source_files".into());
@@ -79,7 +79,7 @@ pub fn analyze_dwarf(
             } else {
                 key.push(format!("@source_file: {dir}/{file}"));
             };
-            key.push(entry_name);
+            key.push("@function: entry_name".to_string());
             let key = key.join(";");
             *contributors.entry(key).or_insert(0) += size;
         }
@@ -94,8 +94,7 @@ fn process_die<R: gimli::Reader>(
 ) -> anyhow::Result<Option<(String, String, String, u64)>> {
     let size = unwrap_or_ok_none!(entry_mapped_size(entry, unit, dwarf)?);
 
-    let file = entry.attr_value(gimli::DW_AT_decl_file)?;
-    let (dir, file) = unpack_file(file.as_ref(), unit, dwarf)
+    let (dir, file) = unpack_file(entry, unit, dwarf)?
         .unwrap_or(("<unknown dir>".into(), "<unknown file>".into()));
 
     let entry_name = unwrap_or_ok_none!(entry.attr_value(gimli::DW_AT_name)?);
@@ -148,20 +147,26 @@ fn entry_mapped_size<R: gimli::Reader>(
 }
 
 fn unpack_file<R: Reader>(
-    file: Option<&AttributeValue<R>>,
+    entry: &DebuggingInformationEntry<'_, '_, R>,
     unit: &gimli::Unit<R>,
     dwarf: &gimli::Dwarf<R>,
-) -> Option<(String, String)> {
-    let AttributeValue::FileIndex(file_index) = file? else {
-        return None;
-    };
-    let header = unit.line_program.as_ref()?.header();
-    let file = header.file(*file_index)?;
-    let dir = file.directory(header)?;
-    let dir = dir.string_value(&dwarf.debug_str)?;
-    let dir = dir.to_string().ok()?;
-    let file_name = file.path_name();
-    let file_name = file_name.string_value(&dwarf.debug_str)?;
-    let file_name = file_name.to_string().ok()?;
-    Some((dir.to_string(), file_name.to_string()))
+) -> anyhow::Result<Option<(String, String)>> {
+    if let Some(AttributeValue::UnitRef(r)) = entry.attr_value(gimli::DW_AT_abstract_origin)? {
+        let entry = unit.entry(r)?;
+        unpack_file(&entry, unit, dwarf)
+    } else if let Some(AttributeValue::FileIndex(file_index)) =
+        entry.attr_value(gimli::DW_AT_decl_file)?
+    {
+        let header = unwrap_or_ok_none!(unit.line_program.as_ref()).header();
+        let file = unwrap_or_ok_none!(header.file(file_index));
+        let dir = unwrap_or_ok_none!(file.directory(header));
+        let dir = unwrap_or_ok_none!(dir.string_value(&dwarf.debug_str));
+        let dir = unwrap_or_ok_none!(dir.to_string().ok());
+        let file_name = file.path_name();
+        let file_name = unwrap_or_ok_none!(file_name.string_value(&dwarf.debug_str));
+        let file_name = unwrap_or_ok_none!(file_name.to_string().ok());
+        Ok(Some((dir.to_string(), file_name.to_string())))
+    } else {
+        Ok(None)
+    }
 }
