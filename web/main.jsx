@@ -1,4 +1,4 @@
-import renderFlameGraph from "./framegraph.js";
+import renderFlameGraph from "./flamegraph.js";
 import * as styles from "./styles.module.css";
 
 if (import.meta.env.DEV) {
@@ -11,8 +11,7 @@ const fileSelect = document.querySelector(`.${styles.fileSelect}`);
 
 async function process(file) {
   try {
-    const buf = await new Response(file).arrayBuffer();
-    const svg = await renderFlameGraph(buf);
+    const svg = await renderFlameGraph(file);
     const svgFile = new File([svg], "flamegraph.svg", { type: "image/svg+xml" });
     const url = URL.createObjectURL(svgFile);
     location.href = url;
