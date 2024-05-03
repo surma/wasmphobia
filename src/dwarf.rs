@@ -1,8 +1,10 @@
 use std::collections::HashMap;
 
+use anyhow::anyhow;
 use fallible_iterator::FallibleIterator;
 use gimli::{
-    read::AttributeValue, DebuggingInformationEntry, EndianSlice, LittleEndian, Reader, Unit,
+    read::AttributeValue, DebuggingInformationEntry, EndianSlice, EntriesCursor, LittleEndian,
+    Reader, Unit,
 };
 
 macro_rules! unwrap_or_continue {
@@ -44,8 +46,8 @@ pub struct DwarfAnalysisOpts {
 pub fn analyze_dwarf(
     dwarf: gimli::Dwarf<EndianSlice<'_, LittleEndian>>,
     opts: &DwarfAnalysisOpts,
-) -> anyhow::Result<HashMap<String, u64>> {
-    let mut contributors: HashMap<String, u64> = HashMap::new();
+) -> anyhow::Result<Contributors> {
+    let mut contributors = Contributors::new();
     let mut iter = dwarf.units();
     while let Some(header) = iter.next()? {
         let unit = dwarf.unit(header)?;
@@ -55,36 +57,66 @@ pub fn analyze_dwarf(
             .unwrap_or("<unknown compilation unit>")
             .trim_start_matches('/');
 
-        let mut entries = unit.entries();
-        while let Some((_, entry)) = entries.next_dfs()? {
-            if !matches!(
-                entry.tag(),
-                gimli::DW_TAG_subprogram | gimli::DW_TAG_inlined_subroutine
-            ) {
-                continue;
+        let mut entry_cursor = unit.entries();
+        while entry_cursor.next_entry()?.is_some() {
+            if let Some(data) = analyze_die(&mut entry_cursor, &unit, &dwarf)? {
+                contributors.extend(data);
             }
-            let mut key = vec![];
-            if let Some(prefix) = &opts.prefix {
-                key.push(prefix.to_string());
-            }
-            if opts.compilation_units {
-                key.push(format!("@compilation_unit: {unit_name}"))
-            }
-            let (dir, file, _entry_name, size) =
-                unwrap_or_continue!(process_die(entry, &unit, &dwarf)?);
-            if opts.split_paths {
-                key.push("@source_files".into());
-                key.extend(dir.split('/').map(Into::into));
-                key.push(file);
-            } else {
-                key.push(format!("@source_file: {dir}/{file}"));
-            };
-            key.push("@function: entry_name".to_string());
-            let key = key.join(";");
-            *contributors.entry(key).or_insert(0) += size;
         }
     }
     Ok(contributors)
+}
+
+type Contributors = HashMap<String, u64>;
+
+fn analyze_die<R: gimli::Reader>(
+    entry_cursor: &mut gimli::EntriesCursor<'_, '_, R>,
+    unit: &gimli::Unit<R>,
+    dwarf: &gimli::Dwarf<R>,
+) -> anyhow::Result<Option<Contributors>> {
+    let entry = entry_cursor
+        .current()
+        .ok_or_else(|| anyhow!("Empty tree in DIE"))?;
+
+    if !matches!(
+        entry.tag(),
+        gimli::DW_TAG_subprogram | gimli::DW_TAG_inlined_subroutine
+    ) {
+        return Ok(None);
+    }
+
+    let (dir, file, name, mut size) = process_die(entry, unit, dwarf)?
+        .ok_or_else(|| anyhow!("DWARF subprogram or inlined subroutine without mapping data"))?;
+
+    let mut result = Contributors::new();
+    if entry.has_children() {
+        entry_cursor
+            .next_entry()?
+            .expect("Guaranteed by has_children");
+        loop {
+            if let Some(child_data) = analyze_die(&mut entry_cursor.clone(), unit, dwarf)? {
+                result.extend(child_data);
+            }
+            if entry_cursor.next_sibling()?.is_none() {
+                break;
+            }
+        }
+        let total_children_size: u64 = result.values().sum();
+        size = size.checked_sub(total_children_size).ok_or_else(|| {
+            anyhow!(
+                "Children of {name} from {dir}/{file} add up to more bytes than the item itself"
+            )
+        })?;
+    }
+
+    let mut key = vec![];
+    key.push("@source_files".into());
+    key.extend(dir.split('/').map(Into::into));
+    key.push(file);
+    key.push(format!("@function: {name}"));
+    let key = key.join(";");
+    *result.entry(key).or_insert(0) += size;
+    Ok(Some(result))
 }
 
 fn process_die<R: gimli::Reader>(
