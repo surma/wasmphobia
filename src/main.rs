@@ -4,6 +4,7 @@ use std::{
     path::PathBuf,
 };
 
+use addr2line::{fallible_iterator::FallibleIterator, gimli::Reader};
 use anyhow::Context;
 
 use clap::Parser;
@@ -16,6 +17,9 @@ struct Args {
     input: Option<PathBuf>,
     #[arg(short, long)]
     output: Option<PathBuf>,
+
+    #[arg(long, default_value_t = false)]
+    show_frames: bool,
 
     #[arg(long)]
     /// Title for the flame graph (default: input file name)
@@ -91,15 +95,28 @@ fn main() -> anyhow::Result<()> {
             "<unknown section>"
         };
         let file = loc.file.unwrap_or("<unknown file>");
-        let line = loc
-            .line
-            .map(|s| format!("{s}"))
-            .unwrap_or_else(|| "<unknown>".to_string());
 
-        let key = format!(
-            "@section: {section_name};{};@line: {line}_",
+        let mut key = format!(
+            "@section: {section_name};{}",
             file.trim_start_matches('/').replace('/', ";")
         );
+
+        if args.show_frames {
+            let funcs: Vec<_> = context
+                .find_frames(map_start)
+                .skip_all_loads()?
+                .filter_map(|frame| {
+                    let name = if let Some(function) = frame.function {
+                        function.name.to_string_lossy()?.to_string()
+                    } else {
+                        "<Unknown>".to_string()
+                    };
+                    Ok(Some(format!("@function: {name}")))
+                })
+                .collect()?;
+            key = format!("{key};{}", funcs.join(";"));
+        }
+
         *contributors.entry(key).or_insert(0) += size;
     }
 
