@@ -40,6 +40,7 @@ export default function DropZone() {
           display: "flex",
           flexDirection: "column",
           textAlign: "center",
+          gap: 3,
         }}
       >
         <Box sx={{ "--bgcolor": theme.theme.colors.canvas.overlay }} className={styles.spinner} hidden>
@@ -50,8 +51,11 @@ export default function DropZone() {
             Drop a <code>.wasm</code> file
           </span>
         </Heading>
-        <Button className={styles.fileSelect}>
-          ... or select one
+        <Button className={styles.fileSelect} variant="primary">
+          Select a Wasm file from your computer
+        </Button>
+        <Button className={styles.exampleButton}>
+          Load Wasmphobia’s Wasm file (~10MB)
         </Button>
         <form className={styles.optionsForm}>
           <CheckboxGroup sx={{ mt: 3 }}>

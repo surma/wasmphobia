@@ -1,6 +1,8 @@
 import * as styles from "./styles.module.css";
 import { nextEvent } from "./utils.js";
 
+const WASMPHOBIA_WASM = "https://s3.eu-west-1.amazonaws.com/f.surma.link/wasmphobia.wasm";
+
 let worker;
 if (!import.meta.env.ssr) {
   worker = new Worker(new URL("./worker.js", import.meta.url), { type: "module" });
@@ -16,6 +18,7 @@ const dropZone = document.body;
 const fileSelect = document.querySelector(`.${styles.fileSelect}`);
 const optionsForm = document.querySelector(`.${styles.optionsForm}`);
 const spinner = document.querySelector(`.${styles.spinner}`);
+const exampleButton = document.querySelector(`.${styles.exampleButton}`);
 
 let idCounter = 0;
 async function process(file) {
@@ -52,6 +55,18 @@ fileSelect.onclick = () => {
   f.type = "file";
   f.onchange = () => process(f.files[0]);
   f.click();
+};
+
+exampleButton.onclick = async () => {
+  showSpinner();
+  try {
+    const blob = await fetch(WASMPHOBIA_WASM).then(r => r.blob());
+    await process(new File([blob], "wasmphobia.wasm", { type: "application/wasm" }));
+  } catch (e) {
+    showError(e.message);
+  } finally {
+    hideSpinner();
+  }
 };
 
 function isValidWasmDrop(dt) {

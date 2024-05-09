@@ -12,6 +12,9 @@
   position: static;
 }
 
+.example-button {
+}
+
 .drop-valid {
   background-color: var(--drop-valid-bg-color);
 }
