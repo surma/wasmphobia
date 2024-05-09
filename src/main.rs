@@ -1,17 +1,13 @@
 use std::{
     collections::HashMap,
     io::{Read, Write},
-    ops::{Range, Sub},
     path::PathBuf,
 };
 
-use anyhow::{anyhow, Context};
+use anyhow::Context;
 
 use clap::Parser;
-
-mod dwarf;
-use dwarf::DwarfAnalysisOpts;
-use gimli::{EndianSlice, LittleEndian};
+use object::{Object, ObjectSection};
 
 #[derive(Clone, Debug, Parser)]
 #[command(version)]
@@ -21,27 +17,9 @@ struct Args {
     #[arg(short, long)]
     output: Option<PathBuf>,
 
-    #[arg(long, default_value_t = false)]
-    /// Group by DWARF compilation units
-    compilation_units: bool,
-
-    #[arg(long, default_value_t = false)]
-    /// Split file paths at each folder in the flame graph
-    split_paths: bool,
-
     #[arg(long)]
     /// Title for the flame graph (default: input file name)
     title: Option<String>,
-}
-
-impl From<Args> for DwarfAnalysisOpts {
-    fn from(val: Args) -> Self {
-        DwarfAnalysisOpts {
-            prefix: None,
-            compilation_units: val.compilation_units,
-            split_paths: val.split_paths,
-        }
-    }
 }
 
 impl From<Args> for inferno::flamegraph::Options<'static> {
@@ -60,6 +38,19 @@ impl From<Args> for inferno::flamegraph::Options<'static> {
     }
 }
 
+struct Segment {
+    name: String,
+    start: u64,
+    end: u64,
+    mapped: u64,
+}
+
+impl Segment {
+    fn size(&self) -> u64 {
+        self.end - self.start
+    }
+}
+
 fn main() -> anyhow::Result<()> {
     let stdinout_marker: PathBuf = PathBuf::from("-");
 
@@ -68,45 +59,54 @@ fn main() -> anyhow::Result<()> {
         Some(path) if path != &stdinout_marker => std::fs::read(path)?,
         _ => read_stdin()?,
     };
+    let module_size = input_data.len();
 
-    let module = walrus::Module::from_buffer(&input_data).context("Parsing WebAssembly")?;
-    let dwarf = module.debug.dwarf;
-    let dwarf = dwarf.borrow(|v| EndianSlice::new(v.as_slice(), LittleEndian));
+    let wasm_file = object::wasm::WasmFile::parse(input_data.as_slice())?;
 
-    const WASM_SECTION_PREFIX: &str = "@wasm_binary_module;@section: ";
-    let wasm_code_section = format!("{WASM_SECTION_PREFIX}code");
+    let mut segments: Vec<_> = wasm_file
+        .sections()
+        .filter_map(|s| {
+            let (start, end) = s.file_range()?;
+            Some(Segment {
+                name: s.name().ok()?.to_string(),
+                start,
+                end,
+                mapped: 0,
+            })
+        })
+        .collect();
 
-    let mut contributors = dwarf::analyze_dwarf(
-        dwarf,
-        &DwarfAnalysisOpts {
-            prefix: Some(wasm_code_section.clone()),
-            ..args.clone().into()
-        },
-    )
-    .context("Analyzing DWARF data")?;
+    let context = addr2line::Context::new(&wasm_file)?;
 
-    let mut wasm_section_sizes = section_sizes(&input_data).context("Analyzing Wasm sections")?;
+    let mut contributors = HashMap::new();
+    for (map_start, size, loc) in context.find_location_range(0, module_size.try_into().unwrap())? {
+        let map_end = map_start + size;
+        let section_name = if let Some(section) = segments
+            .iter_mut()
+            .find(|s| s.start <= map_start && s.end > map_end)
+        {
+            section.mapped += size;
+            section.name.as_str()
+        } else {
+            "<unknown section>"
+        };
+        let file = loc.file.unwrap_or("<unknown file>");
+        let line = loc
+            .line
+            .map(|s| format!("{s}"))
+            .unwrap_or_else(|| "<unknown>".to_string());
 
-    let mapped_wasm_code_size: u64 = contributors.values().sum();
-    let total_code_size = wasm_section_sizes
-        .remove("code")
-        .ok_or_else(|| anyhow!("Wasm module without a code section"))?;
-    if let Some(unmapped_wasm_code_size) = total_code_size.checked_sub(mapped_wasm_code_size) {
-        contributors.insert(
-            format!("{wasm_code_section};<unmapped>"),
-            unmapped_wasm_code_size,
+        let key = format!(
+            "@section: {section_name};{};@line: {line}_",
+            file.trim_start_matches('/').replace('/', ";")
         );
-    } else {
-        eprintln!(
-            "[Warning] Mapped code regions add up to more bytes than the Wasm's code section"
-        );
+        *contributors.entry(key).or_insert(0) += size;
     }
 
-    contributors.extend(
-        wasm_section_sizes
-            .into_iter()
-            .map(|(key, val)| (format!("{WASM_SECTION_PREFIX}{key}"), val)),
-    );
+    for segment in segments {
+        let key = format!("@section: {};<no mapping info>", segment.name);
+        *contributors.entry(key).or_insert(0) += segment.size() - segment.mapped;
+    }
 
     let output: Box<dyn Write> = match &args.output {
         Some(path) if path != &stdinout_marker => Box::new(std::fs::File::create(path)?),
@@ -139,42 +139,4 @@ fn read_stdin() -> std::io::Result<Vec<u8>> {
     let mut buf = vec![];
     std::io::stdin().read_to_end(&mut buf)?;
     Ok(buf)
-}
-
-fn range_size<T: Sub<Output = T>>(r: Range<T>) -> T {
-    r.end - r.start
-}
-
-fn section_sizes(mut module: &[u8]) -> anyhow::Result<HashMap<String, u64>> {
-    use wasmparser::{Chunk, Parser, Payload};
-    let mut sections: HashMap<String, u64> = HashMap::new();
-    let mut cur = Parser::new(0);
-
-    loop {
-        let Chunk::Parsed { payload, consumed } = cur.parse(module, true)? else {
-            anyhow::bail!("Incomplete wasm file")
-        };
-        module = &module[consumed..];
-
-        let (name, size) = match payload {
-            // Sections for WebAssembly modules
-            Payload::TypeSection(s) => ("type".to_string(), range_size(s.range())),
-            Payload::DataSection(s) => ("data".to_string(), range_size(s.range())),
-            Payload::CustomSection(s) => (format!("custom;{}", s.name()), range_size(s.range())),
-            Payload::FunctionSection(s) => ("function".to_string(), range_size(s.range())),
-            Payload::ImportSection(s) => ("import".to_string(), range_size(s.range())),
-            Payload::TableSection(s) => ("table".to_string(), range_size(s.range())),
-            Payload::MemorySection(s) => ("memory".to_string(), range_size(s.range())),
-            Payload::ExportSection(s) => ("export".to_string(), range_size(s.range())),
-            Payload::GlobalSection(s) => ("global".to_string(), range_size(s.range())),
-            Payload::ElementSection(s) => ("element".to_string(), range_size(s.range())),
-            Payload::UnknownSection { range, .. } => ("<unknown>".to_string(), range_size(range)),
-            Payload::CodeSectionStart { range, .. } => ("code".to_string(), range_size(range)),
-            Payload::End(_) => break,
-            _ => continue,
-        };
-        sections.insert(name, size.try_into().unwrap());
-    }
-
-    Ok(sections)
 }
