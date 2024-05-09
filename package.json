@@ -7,11 +7,12 @@
     "dev": "vite",
     "build:rust": "cargo build --no-default-features -r --target wasm32-wasi",
     "build:opt": "wasm-opt -O3 --strip target/wasm32-wasi/release/wasmphobia.wasm -o target/wasm32-wasi/release/wasmphobia.opt.wasm",
+    "build:wasm": "npm run build:rust && npm run build:opt",
     "build:web:static": "vite build",
     "build:web:ssr-script": "vite build --ssr ssr.tsx",
     "build:web:ssr": "node dist/ssr.js",
     "build:web": "npm run build:web:static && npm run build:web:ssr-script && npm run build:web:ssr",
-    "build": "npm run build:rust && npm run build:opt && npm run build:web"
+    "build": "npm run build:wasm && npm run build:web"
   },
   "author": "Surma <surma@surma.dev>",
   "license": "Apache-2.0",

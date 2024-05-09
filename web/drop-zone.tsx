@@ -1,7 +1,22 @@
 import * as React from "react";
 
-import { Box, Button, Heading } from "@primer/react";
+import { Box, Button, Checkbox, CheckboxGroup, FormControl, Heading } from "@primer/react";
 import * as styles from "./styles.module.css";
+
+const options = [
+  {
+    flag: "--show-frames",
+    name: "Show frames",
+    default: true,
+    caption: "Shows function names. When functions get inlined, it shows a stack of them.",
+  },
+  {
+    flag: "--demangle-rust-names",
+    name: "Demangle Rust Names",
+    default: true,
+    caption: "Make Rust functions humanly readable.",
+  },
+];
 
 export default function DropZone() {
   return (
@@ -28,6 +43,18 @@ export default function DropZone() {
         <Button className={styles.fileSelect}>
           ... or select one
         </Button>
+        <form className={styles.optionsForm}>
+          <CheckboxGroup sx={{ mt: 3 }}>
+            <CheckboxGroup.Caption>Options</CheckboxGroup.Caption>
+            {options.map(option => (
+              <FormControl>
+                <Checkbox name={option.flag} checked={option.default} />
+                <FormControl.Label>{option.name}</FormControl.Label>
+                <FormControl.Caption>{option.caption}</FormControl.Caption>
+              </FormControl>
+            ))}
+          </CheckboxGroup>
+        </form>
       </Box>
     </>
   );
