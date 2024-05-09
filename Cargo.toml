@@ -18,4 +18,7 @@ addr2line = "0.22.0"
 anyhow = "1.0.82"
 clap = { version = "4.5.4", features = ["derive"] }
 inferno = { version = "0.11.19", default-features = false, features = ["nameattr"] }
+
+# Exposing transitive dependencies of `addr2line`
 object = { version = "0.35.0", features = ["wasm"] }
+rustc-demangle = "0.1.24"

@@ -4,7 +4,7 @@ use std::{
     path::PathBuf,
 };
 
-use addr2line::{fallible_iterator::FallibleIterator, gimli::Reader};
+use addr2line::fallible_iterator::FallibleIterator;
 use anyhow::Context;
 
 use clap::Parser;
@@ -20,6 +20,9 @@ struct Args {
 
     #[arg(long, default_value_t = false)]
     show_frames: bool,
+
+    #[arg(long, default_value_t = false)]
+    demangle_rust_names: bool,
 
     #[arg(long)]
     /// Title for the flame graph (default: input file name)
@@ -102,18 +105,7 @@ fn main() -> anyhow::Result<()> {
         );
 
         if args.show_frames {
-            let funcs: Vec<_> = context
-                .find_frames(map_start)
-                .skip_all_loads()?
-                .filter_map(|frame| {
-                    let name = if let Some(function) = frame.function {
-                        function.name.to_string_lossy()?.to_string()
-                    } else {
-                        "<Unknown>".to_string()
-                    };
-                    Ok(Some(format!("@function: {name}")))
-                })
-                .collect()?;
+            let funcs = functions_for_address(&args, &context, map_start)?;
             key = format!("{key};{}", funcs.join(";"));
         }
 
@@ -133,6 +125,31 @@ fn main() -> anyhow::Result<()> {
     write_flamegraph(contributors, args.into(), output).context("Rendering flame graph")?;
 
     Ok(())
+}
+
+fn functions_for_address<R: addr2line::gimli::Reader>(
+    args: &Args,
+    context: &addr2line::Context<R>,
+    map_start: u64,
+) -> anyhow::Result<Vec<String>> {
+    let funcs: Vec<_> = context
+        .find_frames(map_start)
+        .skip_all_loads()?
+        .filter_map(|frame| {
+            let mut name = if let Some(function) = frame.function {
+                function.name.to_string_lossy()?.to_string()
+            } else {
+                "<Unknown>".to_string()
+            };
+            if args.demangle_rust_names {
+                if let Ok(demangled) = rustc_demangle::try_demangle(&name) {
+                    name = demangled.to_string();
+                }
+            }
+            Ok(Some(format!("@function: {name}")))
+        })
+        .collect()?;
+    Ok(funcs)
 }
 
 fn write_flamegraph(

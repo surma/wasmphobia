@@ -530,6 +530,7 @@ dependencies = [
  "clap",
  "inferno",
  "object",
+ "rustc-demangle",
 ]
 
 [[package]]
