@@ -9,7 +9,6 @@ path = "src/main.rs"
 doc = false
 
 [profile.release]
-debug = true
 lto = true
 codegen-units = 1
 

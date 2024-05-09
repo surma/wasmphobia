@@ -10,6 +10,24 @@ You can use Wasmphobia interactively on the [website](https://wasmphobia.surma.t
 cargo install --git https://github.com/surma/wasmphobia
 ```
 
+## How to compile your Wasm
+
+If you care about file size, make sure you compile your code with optimizations (like `-O3` and `-flto`) enabled. In most languages, doing a “release” build should enable these settings for you. However, at the same time, doing a release build often strips debug information from the binary. Here’s a short list of how to do release build _with_ debug symbols.
+
+### Rust
+
+You can add `--config "profile.release.debug=true"` to your cargo invocation. For example, to make a release build targeting WASI, you’d run:
+
+```
+cargo build --config "profile.release.debug=true" --release --target wasm32-wasi
+```
+
+### C++ / Emscripten
+
+```
+$(CPP) -O3 -gfull ...
+```
+
 ## Shoutouts and Credit
 
 - [Gimli](https://docs.rs/gimli) for parsing DWARF

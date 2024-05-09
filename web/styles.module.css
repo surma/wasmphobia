@@ -1,3 +1,18 @@
+:global(h1),
+:global(h2),
+:global(h3) {
+  margin-top: 0.9em !important;
+}
+:global(h1) {
+  font-size: 2rem !important;
+}
+:global(h2) {
+  font-size: 1.6rem !important;
+}
+:global(h3) {
+  font-size: 1.2rem !important;
+}
+
 .drop-signal {
   transition: background-color 0.3s ease-in-out;
   position: fixed;
