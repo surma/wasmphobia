@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { Box, Button, Checkbox, CheckboxGroup, FormControl, Heading } from "@primer/react";
+import { Box, Button, Checkbox, CheckboxGroup, FormControl, Heading, Spinner, useTheme } from "@primer/react";
 import * as styles from "./styles.module.css";
 
 const options = [
@@ -18,12 +18,19 @@ const options = [
   },
 ];
 
+function dbg(arg) {
+  console.log({ arg });
+  return arg;
+}
+
 export default function DropZone() {
+  const theme = useTheme();
   return (
     <>
       <div className={[styles.dropZone, styles.dropSignal].join(" ")} />
       <Box
         sx={{
+          position: "relative",
           borderStyle: "dashed",
           borderWidth: ".3rem",
           borderColor: "border.subtle",
@@ -35,6 +42,9 @@ export default function DropZone() {
           textAlign: "center",
         }}
       >
+        <Box sx={{ "--bgcolor": theme.theme.colors.canvas.overlay }} className={styles.spinner} hidden>
+          <Spinner size="large" />
+        </Box>
         <Heading as="h2" sx={{ p: 3, display: "flex", justifyContent: "center", alignItems: "center" }}>
           <span>
             Drop a <code>.wasm</code> file

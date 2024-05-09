@@ -27,3 +27,20 @@
 
 .optionsForm {
 }
+
+.spinner {
+  position: absolute;
+  inset: 0px;
+  background: var(--bgcolor);
+  opacity: 0.8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9;
+  transition: opacity 0.3s ease-in-out;
+}
+
+.spinner[hidden] {
+  opacity: 0;
+  pointer-events: none;
+}

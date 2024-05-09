@@ -1,7 +1,12 @@
 import * as styles from "./styles.module.css";
 import { nextEvent } from "./utils.js";
-const worker = new Worker(new URL("./worker.js", import.meta.url), { type: "module" });
-worker.addEventListener("error", ev => console.error(ev));
+
+let worker;
+if (!import.meta.env.ssr) {
+  worker = new Worker(new URL("./worker.js", import.meta.url), { type: "module" });
+  worker.addEventListener("error", ev => console.error(ev));
+}
+
 if (import.meta.env.DEV) {
   await import("./render.jsx");
 }
@@ -10,10 +15,12 @@ const dropSignal = document.querySelector(`.${styles.dropSignal}`);
 const dropZone = document.body;
 const fileSelect = document.querySelector(`.${styles.fileSelect}`);
 const optionsForm = document.querySelector(`.${styles.optionsForm}`);
+const spinner = document.querySelector(`.${styles.spinner}`);
 
 let idCounter = 0;
 async function process(file) {
   try {
+    showSpinner();
     const id = idCounter++;
     const options = getSelectedOptions();
     worker.postMessage({ id, file, options });
@@ -25,6 +32,8 @@ async function process(file) {
     location.href = url;
   } catch (e) {
     showError(e.message);
+  } finally {
+    hideSpinner();
   }
 }
 
@@ -84,4 +93,12 @@ function showError(text) {
 
 function getSelectedOptions() {
   return Array.from(optionsForm.elements).filter(el => el.checked).map(el => el.name);
+}
+
+function showSpinner() {
+  spinner.hidden = false;
+}
+
+function hideSpinner() {
+  spinner.hidden = true;
 }
