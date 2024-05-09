@@ -9,12 +9,14 @@ if (import.meta.env.DEV) {
 const dropSignal = document.querySelector(`.${styles.dropSignal}`);
 const dropZone = document.body;
 const fileSelect = document.querySelector(`.${styles.fileSelect}`);
+const optionsForm = document.querySelector(`.${styles.optionsForm}`);
 
 let idCounter = 0;
 async function process(file) {
   try {
     const id = idCounter++;
-    worker.postMessage({ id, file });
+    const options = getSelectedOptions();
+    worker.postMessage({ id, file, options });
     const { data: result } = await nextEvent(worker, "message", ev => ev.data.id === id);
     if (result.error) {
       throw Error(result.error);
@@ -78,4 +80,8 @@ const errorText = document.querySelector(`.${styles.errorText}`);
 function showError(text) {
   errorText.textContent = text;
   errorBar.hidden = false;
+}
+
+function getSelectedOptions() {
+  return Array.from(optionsForm.elements).filter(el => el.checked).map(el => el.name);
 }
