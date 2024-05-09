@@ -6,7 +6,7 @@ export default async function renderFlameGraph(file) {
   const input = new WasiFile(data);
   const output = new WasiFile();
   const error = new WasiFile();
-  const wasi = new WASI(["__", `--title=${fileName}`, "--split-paths"], [], [
+  const wasi = new WASI(["__", `--title=${fileName}`, "--show-frames", "--demangle-rust-names"], [], [
     new OpenFile(input),
     new OpenFile(output),
     new OpenFile(error),

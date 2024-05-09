@@ -1,6 +1,7 @@
-import renderFlameGraph from "./flamegraph.js";
 import * as styles from "./styles.module.css";
-
+import { nextEvent } from "./utils.js";
+const worker = new Worker(new URL("./worker.js", import.meta.url), { type: "module" });
+worker.addEventListener("error", ev => console.error(ev));
 if (import.meta.env.DEV) {
   await import("./render.jsx");
 }
@@ -9,11 +10,16 @@ const dropSignal = document.querySelector(`.${styles.dropSignal}`);
 const dropZone = document.body;
 const fileSelect = document.querySelector(`.${styles.fileSelect}`);
 
+let idCounter = 0;
 async function process(file) {
   try {
-    const svg = await renderFlameGraph(file);
-    const svgFile = new File([svg], "flamegraph.svg", { type: "image/svg+xml" });
-    const url = URL.createObjectURL(svgFile);
+    const id = idCounter++;
+    worker.postMessage({ id, file });
+    const { data: result } = await nextEvent(worker, "message", ev => ev.data.id === id);
+    if (result.error) {
+      throw Error(result.error);
+    }
+    const url = URL.createObjectURL(result.svg);
     location.href = url;
   } catch (e) {
     showError(e.message);
