@@ -1,6 +1,11 @@
 import { defineConfig } from "vite";
 
+import cliFlagsPlugin from "./cli-flags.plugin.js";
+
 export default defineConfig({
+  plugins: [
+    cliFlagsPlugin(),
+  ],
   root: new URL("./web", import.meta.url).pathname,
   css: {
     modules: {

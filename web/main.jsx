@@ -20,6 +20,8 @@ const optionsForm = document.querySelector(`.${styles.optionsForm}`);
 const spinner = document.querySelector(`.${styles.spinner}`);
 const exampleButton = document.querySelector(`.${styles.exampleButton}`);
 
+optionsForm.addEventListener("submit", ev => ev.preventDefault());
+
 let idCounter = 0;
 async function process(file) {
   try {
@@ -107,7 +109,16 @@ function showError(text) {
 }
 
 function getSelectedOptions() {
-  return Array.from(optionsForm.elements).filter(el => el.checked).map(el => el.name);
+  return Array.from(optionsForm.elements).flatMap(el => {
+    switch (el.type) {
+      case "checkbox":
+        return el.checked ? [el.name] : [];
+      case "number":
+        return `${el.name}=${el.value}`;
+      default:
+        throw Error("Unknown option field");
+    }
+  });
 }
 
 function showSpinner() {

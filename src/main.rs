@@ -19,17 +19,24 @@ struct Args {
     output: Option<PathBuf>,
 
     #[arg(long, default_value_t = false)]
+    /// Show functions. When a function contains inlined functions, they will be shown as a stack.
     show_frames: bool,
 
     #[arg(long, default_value_t = false)]
+    /// Show human-readable (demangeled) Rust function names.
     demangle_rust_names: bool,
 
     #[arg(long)]
-    /// Title for the flame graph (default: input file name)
+    /// Title for the flame graph (default: input file name).
     title: Option<String>,
 
     #[arg(long, default_value_t = false)]
+    /// Ignore DWARF debug sections.
     ignore_debug_sections: bool,
+
+    #[arg(long, default_value_t = 32)]
+    /// Minimum size of a mapped region in bytes to be shown in the flamegraph. (WARNING: Flamegraph may end up very big and slow.)
+    size_threshold: usize,
 }
 
 impl From<Args> for inferno::flamegraph::Options<'static> {
@@ -39,10 +46,11 @@ impl From<Args> for inferno::flamegraph::Options<'static> {
             .title
             .or_else(|| Some(value.input.as_ref()?.file_name()?.to_str()?.to_string()))
             .unwrap_or("<Unknown wasm file>".to_string());
-        options.subtitle =
-            Some("Contribution to WebAssembly module size per DWARF compilation unit".to_string());
+        options.subtitle = Some("Wasm module size breakdown".to_string());
         options.count_name = "KB".to_string();
         options.factor = 1.0 / 1000.0;
+        options.min_width = value.size_threshold as f64 / 1000.0;
+        options.frame_height = 24;
         options.name_type = "".to_string();
         options
     }

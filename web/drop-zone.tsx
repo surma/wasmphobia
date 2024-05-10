@@ -1,33 +1,21 @@
 import * as React from "react";
 
-import { Box, Button, Checkbox, CheckboxGroup, FormControl, Heading, Spinner, useTheme } from "@primer/react";
+import {
+  Box,
+  Button,
+  Checkbox,
+  CheckboxGroup,
+  FormControl,
+  Heading,
+  Spinner,
+  TextInput,
+  useTheme,
+} from "@primer/react";
 import * as styles from "./styles.module.css";
 
-const options = [
-  {
-    flag: "--show-frames",
-    name: "Show frames",
-    default: true,
-    caption: "Shows function names. When functions get inlined, it shows a stack of them.",
-  },
-  {
-    flag: "--demangle-rust-names",
-    name: "Demangle Rust Names",
-    default: true,
-    caption: "Make Rust functions humanly readable.",
-  },
-  {
-    flag: "--ignore-debug-sections",
-    name: "Ignore Debug Sections",
-    default: true,
-    caption: "Ignore debug sections in the Wasm file.",
-  },
-];
+import options from "cli-flags:";
 
-function dbg(arg) {
-  console.log({ arg });
-  return arg;
-}
+const HIDDEN_FLAGS = new Set(["--title"]);
 
 export default function DropZone() {
   const theme = useTheme();
@@ -66,16 +54,41 @@ export default function DropZone() {
         <form className={styles.optionsForm}>
           <CheckboxGroup sx={{ mt: 3 }}>
             <CheckboxGroup.Caption>Options</CheckboxGroup.Caption>
-            {options.map(option => (
-              <FormControl>
-                <Checkbox name={option.flag} checked={option.default} />
-                <FormControl.Label>{option.name}</FormControl.Label>
-                <FormControl.Caption>{option.caption}</FormControl.Caption>
-              </FormControl>
-            ))}
+            {options.filter(option => !HIDDEN_FLAGS.has(option.flag)).map(option => <CliOption option={option} />)}
           </CheckboxGroup>
         </form>
       </Box>
     </>
+  );
+}
+
+function CliOption({ option }) {
+  switch (option.type) {
+    case "bool":
+      return <BoolCliOption option={option} />;
+    case "usize":
+      return <NumberCliOption option={option} />;
+    default:
+      throw Error(`Unknown CLI flag type: ${option.type}`);
+  }
+}
+
+function BoolCliOption({ option }) {
+  return (
+    <FormControl>
+      <Checkbox name={option.flag} defaultChecked={JSON.parse(option.def)} />
+      <FormControl.Label>{option.title}</FormControl.Label>
+      <FormControl.Caption>{option.description}</FormControl.Caption>
+    </FormControl>
+  );
+}
+
+function NumberCliOption({ option }) {
+  return (
+    <FormControl>
+      <TextInput type="number" min={0} name={option.flag} defaultValue={Number(option.def)} />
+      <FormControl.Label>{option.title}</FormControl.Label>
+      <FormControl.Caption>{option.description}</FormControl.Caption>
+    </FormControl>
   );
 }
