@@ -5,8 +5,10 @@ import {
   Button,
   Checkbox,
   CheckboxGroup,
+  Details,
   FormControl,
   Heading,
+  Link,
   Spinner,
   TextInput,
   useTheme,
@@ -51,31 +53,47 @@ export default function DropZone() {
         <Button className={styles.exampleButton}>
           Load Wasmphobia’s Wasm file (~10MB)
         </Button>
-        <form className={styles.optionsForm}>
-          <CheckboxGroup sx={{ mt: 3 }}>
-            <CheckboxGroup.Caption>Options</CheckboxGroup.Caption>
-            {options.filter(option => !HIDDEN_FLAGS.has(option.flag)).map(option => <CliOption option={option} />)}
-          </CheckboxGroup>
-        </form>
+        <OptionsForm />
       </Box>
     </>
   );
 }
 
-function CliOption({ option }) {
+function OptionsForm() {
+  const activeOptions = options.filter(option => !HIDDEN_FLAGS.has(option.flag));
+  const checkboxes = activeOptions.filter(option => option.type === "bool");
+  const other = activeOptions.filter(option => option.type !== "bool");
+  return (
+    <form className={styles.optionsForm}>
+      <Details sx={{ mt: 3, textAlign: "left" }}>
+        <Link as="summary">Show options</Link>
+        <Box p={3} display="grid" gridTemplateColumns="repeat(2, 1fr)" gridColumnGap={3}>
+          <Box display="grid" gridTemplateColumns={"1fr"} gridRowGap={3}>
+            {other.map(option => <CliOption option={option} sx={{ gridColumn: "2/-1" }} />)}
+          </Box>
+          <Box display="grid" gridTemplateColumns={"auto"} gridRowGap={3}>
+            {checkboxes.map(option => <CliOption option={option} sx={{ gridColumn: "1/2" }} />)}
+          </Box>
+        </Box>
+      </Details>
+    </form>
+  );
+}
+
+function CliOption({ option, ...rest }) {
   switch (option.type) {
     case "bool":
-      return <BoolCliOption option={option} />;
+      return <BoolCliOption option={option} {...rest} />;
     case "usize":
-      return <NumberCliOption option={option} />;
+      return <NumberCliOption option={option} {...rest} />;
     default:
       throw Error(`Unknown CLI flag type: ${option.type}`);
   }
 }
 
-function BoolCliOption({ option }) {
+function BoolCliOption({ option, ...rest }) {
   return (
-    <FormControl>
+    <FormControl {...rest}>
       <Checkbox name={option.flag} defaultChecked={JSON.parse(option.def ?? "false")} />
       <FormControl.Label>{option.title}</FormControl.Label>
       <FormControl.Caption>{option.description}</FormControl.Caption>
@@ -83,9 +101,9 @@ function BoolCliOption({ option }) {
   );
 }
 
-function NumberCliOption({ option }) {
+function NumberCliOption({ option, ...rest }) {
   return (
-    <FormControl>
+    <FormControl {...rest}>
       <TextInput type="number" min={0} name={option.flag} defaultValue={Number(option.def)} />
       <FormControl.Label>{option.title}</FormControl.Label>
       <FormControl.Caption>{option.description}</FormControl.Caption>
