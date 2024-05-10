@@ -83,6 +83,9 @@ fn main() -> anyhow::Result<()> {
     let module_size = input_data.len();
 
     let (dwarf, mut sections) = parse_wasm(&input_data).context("Parsing Wasm")?;
+    if !args.show_debug_sections {
+        sections.retain(|sect| !sect.name.starts_with(".debug"));
+    }
     let context = addr2line::Context::from_dwarf(dwarf).context("Constructing address mapping")?;
 
     let mut contributors = HashMap::new();
