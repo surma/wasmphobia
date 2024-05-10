@@ -27,6 +27,9 @@ struct Args {
     #[arg(long)]
     /// Title for the flame graph (default: input file name)
     title: Option<String>,
+
+    #[arg(long, default_value_t = false)]
+    ignore_debug_sections: bool,
 }
 
 impl From<Args> for inferno::flamegraph::Options<'static> {
@@ -66,6 +69,7 @@ fn main() -> anyhow::Result<()> {
         Some(path) if path != &stdinout_marker => std::fs::read(path)?,
         _ => read_stdin()?,
     };
+    let ignore_debug_sections = args.ignore_debug_sections;
     let module_size = input_data.len();
 
     let wasm_file = object::wasm::WasmFile::parse(input_data.as_slice())?;
@@ -73,13 +77,18 @@ fn main() -> anyhow::Result<()> {
     let mut segments: Vec<_> = wasm_file
         .sections()
         .filter_map(|s| {
-            let (start, end) = s.file_range()?;
-            Some(Segment {
-                name: s.name().ok()?.to_string(),
-                start,
-                end,
-                mapped: 0,
-            })
+            let name = s.name().ok()?.to_string();
+            if ignore_debug_sections && name.starts_with(".debug_") {
+                None
+            } else {
+                let (start, end) = s.file_range()?;
+                Some(Segment {
+                    name,
+                    start,
+                    end,
+                    mapped: 0,
+                })
+            }
         })
         .collect();
 

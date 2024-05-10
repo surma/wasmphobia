@@ -16,6 +16,12 @@ const options = [
     default: true,
     caption: "Make Rust functions humanly readable.",
   },
+  {
+    flag: "--ignore-debug-sections",
+    name: "Ignore Debug Sections",
+    default: true,
+    caption: "Ignore debug sections in the Wasm file.",
+  },
 ];
 
 function dbg(arg) {
