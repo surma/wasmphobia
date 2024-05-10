@@ -16,10 +16,10 @@ If you care about file size, make sure you compile your code with optimizations 
 
 ### Rust
 
-You can add `--config "profile.release.debug=true"` to your cargo invocation. For example, to make a release build targeting WASI, you’d run:
+You can add `--config "profile.release.debug=true"` to your cargo invocation. If your release profile strips symbols, you will also need to disable this with `--config "profile.release.strip=false"`. For example, to make a release build targeting WASI, you’d run:
 
 ```
-cargo build --config "profile.release.debug=true" --release --target wasm32-wasi
+cargo build --config "profile.release.debug=true" --config "profile.release.strip=false" --release --target wasm32-wasi
 ```
 
 ### C++ / Emscripten
