@@ -18,24 +18,24 @@ struct Args {
     #[arg(short, long)]
     output: Option<PathBuf>,
 
-    #[arg(long, default_value_t = false)]
-    /// Show functions. When a function contains inlined functions, they will be shown as a stack.
-    show_frames: bool,
+    #[arg(long)]
+    /// Only break down to files, not functions.
+    files_only: bool,
 
-    #[arg(long, default_value_t = false)]
-    /// Show human-readable (demangeled) Rust function names.
-    demangle_rust_names: bool,
+    #[arg(long)]
+    /// Show raw object symbol names for functions, rather than demangling them.
+    raw_symbols: bool,
 
     #[arg(long)]
     /// Title for the flame graph (default: input file name).
     title: Option<String>,
 
-    #[arg(long, default_value_t = false)]
-    /// Ignore DWARF debug sections.
-    ignore_debug_sections: bool,
+    #[arg(long)]
+    /// Show DWARF debug sections in the breakdown.
+    show_debug_sections: bool,
 
     #[arg(long, default_value_t = 32)]
-    /// Minimum size of a mapped region in bytes to be shown in the flamegraph. (WARNING: Flamegraph may end up very big and slow.)
+    /// Minimum size of a mapped region in bytes to be shown in the flamegraph. (WARNING: Small values can make the flamegraph very big and slow.)
     size_threshold: usize,
 }
 
@@ -77,7 +77,6 @@ fn main() -> anyhow::Result<()> {
         Some(path) if path != &stdinout_marker => std::fs::read(path)?,
         _ => read_stdin()?,
     };
-    let ignore_debug_sections = args.ignore_debug_sections;
     let module_size = input_data.len();
 
     let wasm_file = object::wasm::WasmFile::parse(input_data.as_slice())?;
@@ -86,24 +85,26 @@ fn main() -> anyhow::Result<()> {
         .sections()
         .filter_map(|s| {
             let name = s.name().ok()?.to_string();
-            if ignore_debug_sections && name.starts_with(".debug_") {
-                None
-            } else {
-                let (start, end) = s.file_range()?;
-                Some(Segment {
-                    name,
-                    start,
-                    end,
-                    mapped: 0,
-                })
+            if !args.show_debug_sections && name.starts_with(".debug_") {
+                return None;
             }
+            let (start, end) = s.file_range()?;
+            Some(Segment {
+                name,
+                start,
+                end,
+                mapped: 0,
+            })
         })
         .collect();
 
     let context = addr2line::Context::new(&wasm_file)?;
 
     let mut contributors = HashMap::new();
-    for (map_start, size, loc) in context.find_location_range(0, module_size.try_into().unwrap())? {
+    let locations: Vec<_> = FallibleIterator::collect(
+        context.find_location_range(0, module_size.try_into().unwrap())?,
+    )?;
+    for (map_start, size, loc) in locations.into_iter().rev() {
         let map_end = map_start + size;
         let section_name = if let Some(section) = segments
             .iter_mut()
@@ -121,7 +122,7 @@ fn main() -> anyhow::Result<()> {
             file.trim_start_matches('/').replace('/', ";")
         );
 
-        if args.show_frames {
+        if !args.files_only {
             let funcs = functions_for_address(&args, &context, map_start)?;
             key = format!("{key};{}", funcs.join(";"));
         }
@@ -158,8 +159,11 @@ fn functions_for_address<R: addr2line::gimli::Reader>(
             } else {
                 "<Unknown>".to_string()
             };
-            if args.demangle_rust_names {
+            if !args.raw_symbols {
                 if let Ok(demangled) = rustc_demangle::try_demangle(&name) {
+                    name = demangled.to_string();
+                }
+                if let Ok(demangled) = cpp_demangle::Symbol::new(name.clone()) {
                     name = demangled.to_string();
                 }
             }

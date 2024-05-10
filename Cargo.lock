@@ -528,6 +528,7 @@ dependencies = [
  "addr2line",
  "anyhow",
  "clap",
+ "cpp_demangle",
  "inferno",
  "object",
  "rustc-demangle",

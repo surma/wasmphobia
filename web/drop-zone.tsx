@@ -76,7 +76,7 @@ function CliOption({ option }) {
 function BoolCliOption({ option }) {
   return (
     <FormControl>
-      <Checkbox name={option.flag} defaultChecked={JSON.parse(option.def)} />
+      <Checkbox name={option.flag} defaultChecked={JSON.parse(option.def ?? "false")} />
       <FormControl.Label>{option.title}</FormControl.Label>
       <FormControl.Caption>{option.description}</FormControl.Caption>
     </FormControl>

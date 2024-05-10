@@ -9,6 +9,7 @@ path = "src/main.rs"
 doc = false
 
 [profile.release]
+debug = true
 lto = true
 codegen-units = 1
 
@@ -16,6 +17,7 @@ codegen-units = 1
 addr2line = "0.22.0"
 anyhow = "1.0.82"
 clap = { version = "4.5.4", features = ["derive"] }
+cpp_demangle = "0.4.3"
 inferno = { version = "0.11.19", default-features = false, features = ["nameattr"] }
 
 # Exposing transitive dependencies of `addr2line`

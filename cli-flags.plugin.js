@@ -3,8 +3,8 @@ import * as fs from "node:fs/promises";
 const MARKER = "cli-flags:";
 
 const STRUCT_MATCHER = /struct\s*Args\s*\{[^}]+\}/;
-const FLAG_MATCHER =
-  /#\[arg\(.+default_value_t\s*=\s*(?<def>.+)(,|\)).+$\s*\/\/\/(?<comment>.+)$\s*(?<flag>[^:]+):(?<type>[^,]+),?$/gm;
+const FLAG_MATCHER = /#\[arg\((?<params>.+)\)\].*$\s*\/\/\/(?<comment>.+)$\s*(?<flag>[^:]+):(?<type>[^,]+),?$/gm;
+const DEFAULT_MATCHER = /default_value_t\s*=\s*(?<def>[^,\)]+)/;
 
 export default function optionsExtractorPlugin() {
   return {
@@ -12,12 +12,12 @@ export default function optionsExtractorPlugin() {
     resolveId(id) {
       if (id !== MARKER) return;
       const file = new URL("./src/main.rs", import.meta.url).pathname;
-      this.addWatchFile(file);
       return MARKER + file;
     },
     async load(id) {
       if (!id.startsWith(MARKER)) return;
       const file = id.slice(MARKER.length);
+      this.addWatchFile(file);
       const code = await fs.readFile(file, "utf8");
       const [struct] = STRUCT_MATCHER.exec(code);
       const flags = [];
@@ -25,14 +25,18 @@ export default function optionsExtractorPlugin() {
         const match = FLAG_MATCHER.exec(struct);
         if (!match) break;
 
-        const { comment, flag, type, def } = match.groups;
-        flags.push({
+        const { comment, flag, type, params } = match.groups;
+        const flagDesc = {
           flag: `--${flag.trim().replaceAll("_", "-")}`,
           title: flagToTitle(flag.trim()),
           description: comment.trim(),
           type: type.trim(),
-          def: def.trim(),
-        });
+        };
+        const def = DEFAULT_MATCHER.exec(params);
+        if (def) {
+          flagDesc.def = def.groups.def.trim();
+        }
+        flags.push(flagDesc);
       }
       return `export default ${JSON.stringify(flags)}`;
     },
