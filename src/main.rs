@@ -4,11 +4,13 @@ use std::{
     path::PathBuf,
 };
 
-use addr2line::fallible_iterator::FallibleIterator;
+use addr2line::{
+    fallible_iterator::FallibleIterator,
+    gimli::{read::Dwarf, EndianSlice, LittleEndian},
+};
 use anyhow::Context;
 
 use clap::Parser;
-use object::{Object, ObjectSection};
 
 #[derive(Clone, Debug, Parser)]
 #[command(version)]
@@ -74,31 +76,33 @@ fn main() -> anyhow::Result<()> {
 
     let args = Args::parse();
     let input_data = match &args.input {
-        Some(path) if path != &stdinout_marker => std::fs::read(path)?,
+        Some(path) if path != &stdinout_marker => std::fs::read(path).context("Reading input")?,
         _ => read_stdin()?,
     };
     let module_size = input_data.len();
 
-    let wasm_file = object::wasm::WasmFile::parse(input_data.as_slice())?;
+    let dwarf = parse_wasm(&input_data).context("Parsing Wasm")?;
+    // let wasm_file = object::wasm::WasmFile::parse(input_data.as_slice())?;
 
-    let mut segments: Vec<_> = wasm_file
-        .sections()
-        .filter_map(|s| {
-            let name = s.name().ok()?.to_string();
-            if !args.show_debug_sections && name.starts_with(".debug_") {
-                return None;
-            }
-            let (start, end) = s.file_range()?;
-            Some(Segment {
-                name,
-                start,
-                end,
-                mapped: 0,
-            })
-        })
-        .collect();
+    // let mut segments: Vec<_> = wasm_file
+    //     .sections()
+    //     .filter_map(|s| {
+    //         let name = s.name().ok()?.to_string();
+    //         if !args.show_debug_sections && name.starts_with(".debug_") {
+    //             return None;
+    //         }
+    //         let (start, end) = s.file_range()?;
+    //         Some(Segment {
+    //             name,
+    //             start,
+    //             end,
+    //             mapped: 0,
+    //         })
+    //     })
+    //     .collect();
+    let mut segments: Vec<Segment> = vec![];
 
-    let context = addr2line::Context::new(&wasm_file)?;
+    let context = addr2line::Context::from_dwarf(dwarf).context("Constructing address mapping")?;
 
     let mut contributors = HashMap::new();
     let locations: Vec<_> = FallibleIterator::collect(
@@ -143,6 +147,36 @@ fn main() -> anyhow::Result<()> {
     write_flamegraph(contributors, args.into(), output).context("Rendering flame graph")?;
 
     Ok(())
+}
+
+fn parse_wasm<'a>(buf: &'a [u8]) -> anyhow::Result<Dwarf<EndianSlice<'a, LittleEndian>>> {
+    use wasmparser::{Parser, Payload};
+
+    static EMPTY_SECTION: &[u8] = &[];
+
+    let parser = Parser::new(0);
+    let mut dwarf_sections: HashMap<&'a str, &'a [u8]> = HashMap::new();
+    for payload in parser.parse_all(buf) {
+        match payload? {
+            Payload::CustomSection(section) => {
+                let name = section.name();
+                if name.starts_with(".debug") {
+                    dwarf_sections.insert(name, section.data());
+                }
+            }
+            Payload::End(_) => break,
+            _ => {}
+        };
+    }
+
+    let dwarf = Dwarf::load(|section_id| -> anyhow::Result<_> {
+        let data = *dwarf_sections
+            .get(section_id.name())
+            .unwrap_or(&EMPTY_SECTION);
+        Ok(EndianSlice::new(data, LittleEndian))
+    })?;
+
+    Ok(dwarf)
 }
 
 fn functions_for_address<R: addr2line::gimli::Reader>(
