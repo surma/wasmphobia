@@ -76,15 +76,18 @@ fn main() -> anyhow::Result<()> {
     let stdinout_marker: PathBuf = PathBuf::from("-");
 
     let args = Args::parse();
-    let input_data = match &args.input {
+    let mut input_data = match &args.input {
         Some(path) if path != &stdinout_marker => std::fs::read(path).context("Reading input")?,
         _ => read_stdin()?,
     };
 
-    let contributors = if input_data[0] == b'{' {
-        analyze_sourcemaps(&args, input_data).context("Analyzing sourcemaps")?
+    if sourcemaps::has_embedded_sourcemap(&input_data) {
+        input_data = sourcemaps::unembed_sourcemap(&input_data).context("Unembedding sourcemap")?;
+    }
+    let contributors = if is_sourcemap(&input_data) {
+        analyze_sourcemaps(&args, &input_data).context("Analyzing sourcemaps")?
     } else {
-        analyze_wasm(&args, input_data).context("Analyzing wasm")?
+        analyze_wasm(&args, &input_data).context("Analyzing wasm")?
     };
 
     let output: Box<dyn Write> = match &args.output {
@@ -97,9 +100,50 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn analyze_sourcemaps(_args: &Args, input_data: Vec<u8>) -> anyhow::Result<HashMap<String, u64>> {
+mod sourcemaps {
+    use anyhow::{anyhow, Context};
+    use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
+
+    const MARKER: &[u8] = b"//# sourceMappingURL=data:";
+
+    pub fn unembed_sourcemap(input_data: &[u8]) -> anyhow::Result<Vec<u8>> {
+        let ref_pos = input_data
+            .windows(MARKER.len())
+            .position(|chunk| chunk == MARKER)
+            .ok_or_else(|| anyhow!("Must be called with data that contains a source map"))?;
+
+        let sourcemap = &input_data[ref_pos..];
+
+        const DATA_MARKER: &[u8] = b"base64,";
+        let data_pos = sourcemap
+            .windows(DATA_MARKER.len())
+            .position(|chunk| chunk == DATA_MARKER)
+            .ok_or_else(|| anyhow!("Sourcemap data URL is not base64"))?;
+        let data = &sourcemap[(data_pos + DATA_MARKER.len())..];
+        let end = data.iter().position(|c| *c == b'\n').unwrap_or(data.len());
+        BASE64.decode(&data[..end]).context("Decoding base64")
+    }
+
+    pub fn has_embedded_sourcemap(input_data: &[u8]) -> bool {
+        input_data
+            .windows(MARKER.len())
+            .any(|chunk| chunk == MARKER)
+    }
+}
+
+fn is_sourcemap(input_data: &[u8]) -> bool {
+    const MARKER: &[u8] = b"\"mappings\"";
+    if input_data[0] != b'{' {
+        return false;
+    }
+    input_data
+        .windows(MARKER.len())
+        .any(|chunk| chunk == MARKER)
+}
+
+fn analyze_sourcemaps(_args: &Args, input_data: &[u8]) -> anyhow::Result<HashMap<String, u64>> {
     use sourcemap::SourceMap;
-    let sm = SourceMap::from_slice(&input_data)?;
+    let sm = SourceMap::from_slice(input_data)?;
     let mut contributors = HashMap::new();
     let mut prev_line = 0;
     let mut prev_col = 0;
@@ -123,9 +167,9 @@ fn analyze_sourcemaps(_args: &Args, input_data: Vec<u8>) -> anyhow::Result<HashM
     Ok(contributors)
 }
 
-fn analyze_wasm(args: &Args, input_data: Vec<u8>) -> anyhow::Result<HashMap<String, u64>> {
+fn analyze_wasm(args: &Args, input_data: &[u8]) -> anyhow::Result<HashMap<String, u64>> {
     let module_size = input_data.len();
-    let (dwarf, mut sections) = parse_wasm(&input_data).context("Parsing Wasm")?;
+    let (dwarf, mut sections) = parse_wasm(input_data).context("Parsing Wasm")?;
     if !args.show_debug_sections {
         sections.retain(|sect| !sect.name.starts_with(".debug"));
     }

@@ -76,9 +76,10 @@ function isInvalidDrop(dt) {
   const item = dt.items[0];
   if (item.kind != "file") return "Only files can be opened";
   if (item.type == "application/wasm") return null;
+  if (item.type == "text/javascript") return null;
   // Without a known file type, we’ll assume it’s a valid vile
   if (!item.type) return null;
-  return "Unsupported file format";
+  return `Unsupported file format: ${item.type}`;
 }
 
 dropZone.ondragleave = () => resetDropSignal();
