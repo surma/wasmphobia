@@ -10,6 +10,7 @@ import {
   Heading,
   Link,
   Spinner,
+  Text,
   TextInput,
   useTheme,
 } from "@primer/react";
@@ -54,6 +55,7 @@ export default function DropZone() {
           Load Wasmphobia’s Wasm file (~10MB)
         </Button>
         <OptionsForm />
+        <Text fontSize={"0.5em"} mb={-2} opacity={0.4}>🤫 Wasmphobia can also open JavaScript source maps</Text>
       </Box>
     </>
   );

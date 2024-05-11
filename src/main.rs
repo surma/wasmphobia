@@ -101,16 +101,16 @@ fn analyze_sourcemaps(_args: &Args, input_data: Vec<u8>) -> anyhow::Result<HashM
     use sourcemap::SourceMap;
     let sm = SourceMap::from_slice(&input_data)?;
     let mut contributors = HashMap::new();
-    let mut last: Option<(u32, u32)> = None;
+    let mut prev_line = 0;
+    let mut prev_col = 0;
     for (line, col, idx) in sm.index_iter() {
-        let Some((prev_line, prev_col)) = last.replace((line, col)) else {
-            continue;
-        };
         let size = if prev_line == line {
             col - prev_col
         } else {
             col
         };
+        (prev_line, prev_col) = (line, col);
+
         let token = sm.get_token(idx).expect("Index given by index iterator");
         let source_file = token
             .get_source()
