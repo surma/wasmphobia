@@ -31,7 +31,7 @@ $(CPP) -O3 -gfull ...
 ## Shoutouts and Credit
 
 - [Gimli](https://docs.rs/gimli) for parsing DWARF
-- [addr2line](https://doc.rs/addr2line) for converting addresses to source locations.
+- [addr2line](https://docs.rs/addr2line) for converting addresses to source locations.
 - [Inferno](https://docs.rs/inferno) to render flame graphs
 - [Primer](https://primer.style/) for the website
 - [Bundlephobia](https://bundlephobia.com/) for the name
