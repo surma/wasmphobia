@@ -48,8 +48,8 @@ impl From<Args> for inferno::flamegraph::Options<'static> {
         options.title = value
             .title
             .or_else(|| Some(value.input.as_ref()?.file_name()?.to_str()?.to_string()))
-            .unwrap_or("<Unknown wasm file>".to_string());
-        options.subtitle = Some("Wasm module size breakdown".to_string());
+            .unwrap_or("<Unknown file>".to_string());
+        options.subtitle = Some("File size breakdown".to_string());
         options.count_name = "KB".to_string();
         options.factor = 1.0 / 1000.0;
         options.min_width = value.size_threshold as f64 / 1000.0;
@@ -80,14 +80,56 @@ fn main() -> anyhow::Result<()> {
         Some(path) if path != &stdinout_marker => std::fs::read(path).context("Reading input")?,
         _ => read_stdin()?,
     };
-    let module_size = input_data.len();
 
+    let contributors = if input_data[0] == b'{' {
+        analyze_sourcemaps(&args, input_data).context("Analyzing sourcemaps")?
+    } else {
+        analyze_wasm(&args, input_data).context("Analyzing wasm")?
+    };
+
+    let output: Box<dyn Write> = match &args.output {
+        Some(path) if path != &stdinout_marker => Box::new(std::fs::File::create(path)?),
+        _ => Box::new(std::io::stdout()),
+    };
+
+    write_flamegraph(contributors, args.into(), output).context("Rendering flame graph")?;
+
+    Ok(())
+}
+
+fn analyze_sourcemaps(_args: &Args, input_data: Vec<u8>) -> anyhow::Result<HashMap<String, u64>> {
+    use sourcemap::SourceMap;
+    let sm = SourceMap::from_slice(&input_data)?;
+    let mut contributors = HashMap::new();
+    let mut last: Option<(u32, u32)> = None;
+    for (line, col, idx) in sm.index_iter() {
+        let Some((prev_line, prev_col)) = last.replace((line, col)) else {
+            continue;
+        };
+        let size = if prev_line == line {
+            col - prev_col
+        } else {
+            col
+        };
+        let token = sm.get_token(idx).expect("Index given by index iterator");
+        let source_file = token
+            .get_source()
+            .unwrap_or("<unknown file>")
+            .split('/')
+            .collect::<Vec<_>>()
+            .join(";");
+        *contributors.entry(source_file).or_insert(0) += u64::from(size);
+    }
+    Ok(contributors)
+}
+
+fn analyze_wasm(args: &Args, input_data: Vec<u8>) -> anyhow::Result<HashMap<String, u64>> {
+    let module_size = input_data.len();
     let (dwarf, mut sections) = parse_wasm(&input_data).context("Parsing Wasm")?;
     if !args.show_debug_sections {
         sections.retain(|sect| !sect.name.starts_with(".debug"));
     }
     let context = addr2line::Context::from_dwarf(dwarf).context("Constructing address mapping")?;
-
     let mut contributors = HashMap::new();
     let locations: Vec<_> = FallibleIterator::collect(
         context.find_location_range(0, module_size.try_into().unwrap())?,
@@ -111,26 +153,17 @@ fn main() -> anyhow::Result<()> {
         );
 
         if !args.files_only {
-            let funcs = functions_for_address(&args, &context, map_start)?;
+            let funcs = functions_for_address(args, &context, map_start)?;
             key = format!("{key};{}", funcs.join(";"));
         }
 
         *contributors.entry(key).or_insert(0) += size;
     }
-
     for segment in sections {
         let key = format!("@section: {};<no mapping info>", segment.name);
         *contributors.entry(key).or_insert(0) += segment.size() - segment.mapped;
     }
-
-    let output: Box<dyn Write> = match &args.output {
-        Some(path) if path != &stdinout_marker => Box::new(std::fs::File::create(path)?),
-        _ => Box::new(std::io::stdout()),
-    };
-
-    write_flamegraph(contributors, args.into(), output).context("Rendering flame graph")?;
-
-    Ok(())
+    Ok(contributors)
 }
 
 fn parse_wasm<'a>(
