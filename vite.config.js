@@ -17,6 +17,7 @@ export default defineConfig({
     outDir: new URL("./dist", import.meta.url).pathname,
     emptyOutDir: false,
     minify: "esbuild",
+    sourcemap: true,
   },
   resolve: {
     alias: {

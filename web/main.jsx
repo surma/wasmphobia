@@ -71,19 +71,22 @@ exampleButton.onclick = async () => {
   }
 };
 
-function isValidWasmDrop(dt) {
-  if (dt.items.length != 1) return null;
+function isInvalidDrop(dt) {
+  if (dt.items.length != 1) return "Only single files are supported";
   const item = dt.items[0];
-  if (item.kind != "file") return null;
-  if (item.type != "application/wasm") return null;
-  return item;
+  if (item.kind != "file") return "Only files can be opened";
+  if (item.type == "application/wasm") return null;
+  if (item.type == "text/javascript") return null;
+  // Without a known file type, we’ll assume it’s a valid vile
+  if (!item.type) return null;
+  return `Unsupported file format: ${item.type}`;
 }
 
 dropZone.ondragleave = () => resetDropSignal();
 
 dropZone.ondragover = ev => {
   ev.preventDefault();
-  if (!isValidWasmDrop(ev.dataTransfer)) {
+  if (isInvalidDrop(ev.dataTransfer)) {
     signalDropInvalid();
     return;
   }
@@ -92,8 +95,9 @@ dropZone.ondragover = ev => {
 dropZone.ondrop = ev => {
   ev.preventDefault();
   resetDropSignal();
-  if (!isValidWasmDrop(ev.dataTransfer)) {
-    showError("Unsupported file format");
+  const error = isInvalidDrop(ev.dataTransfer);
+  if (error) {
+    showError(error);
     return;
   }
   const file = ev.dataTransfer.files[0];

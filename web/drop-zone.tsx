@@ -10,6 +10,7 @@ import {
   Heading,
   Link,
   Spinner,
+  Text,
   TextInput,
   useTheme,
 } from "@primer/react";
@@ -54,6 +55,9 @@ export default function DropZone() {
           Load Wasmphobia’s Wasm file (~10MB)
         </Button>
         <OptionsForm />
+        <Text fontSize={"0.5em"} mb={-2} opacity={0.4}>
+          🤫 Wasmphobia has experimental support for JavaScript source maps
+        </Text>
       </Box>
     </>
   );
@@ -67,7 +71,7 @@ function OptionsForm() {
     <form className={styles.optionsForm}>
       <Details sx={{ mt: 3, textAlign: "left" }}>
         <Link as="summary">Show options</Link>
-        <Box p={3} display="grid" gridTemplateColumns="repeat(2, 1fr)" gridColumnGap={3}>
+        <Box p={3} display="grid" gridTemplateColumns={["1fr", "repeat(2, 1fr)"]} gridGap={3}>
           <Box display="grid" gridTemplateColumns={"1fr"} gridRowGap={3}>
             {other.map(option => <CliOption option={option} sx={{ gridColumn: "2/-1" }} />)}
           </Box>

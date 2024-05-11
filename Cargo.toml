@@ -22,5 +22,7 @@ inferno = { version = "0.11.19", default-features = false, features = ["nameattr
 wasmparser = "0.207.0"
 
 # Exposing transitive dependencies of `addr2line`
+base64 = "0.22.1"
 object = { version = "0.35.0", features = ["wasm"] }
 rustc-demangle = "0.1.24"
+sourcemap = "8.0.1"
