@@ -1,14 +1,17 @@
 use std::{
     collections::HashMap,
     io::{Read, Write},
+    ops::Range,
     path::PathBuf,
 };
 
-use addr2line::fallible_iterator::FallibleIterator;
+use addr2line::{
+    fallible_iterator::FallibleIterator,
+    gimli::{read::Dwarf, EndianSlice, LittleEndian},
+};
 use anyhow::Context;
 
 use clap::Parser;
-use object::{Object, ObjectSection};
 
 #[derive(Clone, Debug, Parser)]
 #[command(version)]
@@ -56,14 +59,14 @@ impl From<Args> for inferno::flamegraph::Options<'static> {
     }
 }
 
-struct Segment {
+struct Section {
     name: String,
     start: u64,
     end: u64,
     mapped: u64,
 }
 
-impl Segment {
+impl Section {
     fn size(&self) -> u64 {
         self.end - self.start
     }
@@ -74,31 +77,16 @@ fn main() -> anyhow::Result<()> {
 
     let args = Args::parse();
     let input_data = match &args.input {
-        Some(path) if path != &stdinout_marker => std::fs::read(path)?,
+        Some(path) if path != &stdinout_marker => std::fs::read(path).context("Reading input")?,
         _ => read_stdin()?,
     };
     let module_size = input_data.len();
 
-    let wasm_file = object::wasm::WasmFile::parse(input_data.as_slice())?;
-
-    let mut segments: Vec<_> = wasm_file
-        .sections()
-        .filter_map(|s| {
-            let name = s.name().ok()?.to_string();
-            if !args.show_debug_sections && name.starts_with(".debug_") {
-                return None;
-            }
-            let (start, end) = s.file_range()?;
-            Some(Segment {
-                name,
-                start,
-                end,
-                mapped: 0,
-            })
-        })
-        .collect();
-
-    let context = addr2line::Context::new(&wasm_file)?;
+    let (dwarf, mut sections) = parse_wasm(&input_data).context("Parsing Wasm")?;
+    if !args.show_debug_sections {
+        sections.retain(|sect| !sect.name.starts_with(".debug"));
+    }
+    let context = addr2line::Context::from_dwarf(dwarf).context("Constructing address mapping")?;
 
     let mut contributors = HashMap::new();
     let locations: Vec<_> = FallibleIterator::collect(
@@ -106,7 +94,7 @@ fn main() -> anyhow::Result<()> {
     )?;
     for (map_start, size, loc) in locations.into_iter().rev() {
         let map_end = map_start + size;
-        let section_name = if let Some(section) = segments
+        let section_name = if let Some(section) = sections
             .iter_mut()
             .find(|s| s.start <= map_start && s.end > map_end)
         {
@@ -130,7 +118,7 @@ fn main() -> anyhow::Result<()> {
         *contributors.entry(key).or_insert(0) += size;
     }
 
-    for segment in segments {
+    for segment in sections {
         let key = format!("@section: {};<no mapping info>", segment.name);
         *contributors.entry(key).or_insert(0) += segment.size() - segment.mapped;
     }
@@ -143,6 +131,73 @@ fn main() -> anyhow::Result<()> {
     write_flamegraph(contributors, args.into(), output).context("Rendering flame graph")?;
 
     Ok(())
+}
+
+fn parse_wasm<'a>(
+    buf: &'a [u8],
+) -> anyhow::Result<(Dwarf<EndianSlice<'a, LittleEndian>>, Vec<Section>)> {
+    use wasmparser::{Parser, Payload, Payload::*};
+
+    static EMPTY_SECTION: &[u8] = &[];
+
+    let parser = Parser::new(0);
+    let mut dwarf_sections: HashMap<&'a str, &'a [u8]> = HashMap::new();
+    let mut sections = vec![];
+    for payload in parser.parse_all(buf) {
+        let (name, range) = match payload? {
+            CustomSection(section) => {
+                let name = section.name();
+                if name.starts_with(".debug") {
+                    dwarf_sections.insert(name, section.data());
+                }
+                let start: usize = section.data_offset();
+                let end = start + section.data().len();
+                (name.to_string(), Range { start, end })
+            }
+
+            TypeSection(s) => ("type".to_string(), s.range()),
+            ImportSection(s) => ("import".to_string(), s.range()),
+            FunctionSection(s) => ("function".to_string(), s.range()),
+            TableSection(s) => ("table".to_string(), s.range()),
+            MemorySection(s) => ("memory".to_string(), s.range()),
+            TagSection(s) => ("tag".to_string(), s.range()),
+            GlobalSection(s) => ("global".to_string(), s.range()),
+            ExportSection(s) => ("export".to_string(), s.range()),
+            ElementSection(s) => ("element".to_string(), s.range()),
+            DataSection(s) => ("data".to_string(), s.range()),
+            CodeSectionStart { range, .. } => ("code".to_string(), range),
+            InstanceSection(s) => ("instance".to_string(), s.range()),
+            CoreTypeSection(s) => ("core type".to_string(), s.range()),
+            // FIXME: Is recursion needed here?
+            ComponentSection {
+                unchecked_range, ..
+            } => ("component".to_string(), unchecked_range),
+            ComponentInstanceSection(s) => ("component instance".to_string(), s.range()),
+            ComponentAliasSection(s) => ("component alias".to_string(), s.range()),
+            ComponentTypeSection(s) => ("component type".to_string(), s.range()),
+            ComponentCanonicalSection(s) => ("component canonical".to_string(), s.range()),
+            ComponentImportSection(s) => ("component import".to_string(), s.range()),
+            ComponentExportSection(s) => ("component export".to_string(), s.range()),
+
+            Payload::End(_) => break,
+            _ => continue,
+        };
+        sections.push(Section {
+            name,
+            start: range.start.try_into().unwrap(),
+            end: range.end.try_into().unwrap(),
+            mapped: 0,
+        });
+    }
+
+    let dwarf = Dwarf::load(|section_id| -> anyhow::Result<_> {
+        let data = *dwarf_sections
+            .get(section_id.name())
+            .unwrap_or(&EMPTY_SECTION);
+        Ok(EndianSlice::new(data, LittleEndian))
+    })?;
+
+    Ok((dwarf, sections))
 }
 
 fn functions_for_address<R: addr2line::gimli::Reader>(
