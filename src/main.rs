@@ -9,6 +9,7 @@ use anyhow::Context;
 use clap::Parser;
 use formats::{
     analyze_bundle,
+    macho::MachoBundle,
     sourcemaps::{EmbeddedSourceMapBundle, RawSourceMapBundle},
     wasm::WasmBundle,
 };
@@ -76,6 +77,7 @@ fn main() -> anyhow::Result<()> {
         &args.clone().into(),
         &input_data,
         WasmBundle,
+        MachoBundle,
         RawSourceMapBundle,
         EmbeddedSourceMapBundle,
     )?;
