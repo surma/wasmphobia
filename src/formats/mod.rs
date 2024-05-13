@@ -4,7 +4,7 @@ pub mod wasm;
 
 use std::collections::HashMap;
 
-use derive_more::{Deref, DerefMut};
+use derive_more::{Deref, DerefMut, Into};
 
 use crate::Args;
 
@@ -25,7 +25,7 @@ impl From<Args> for BundleAnalysisConfig {
     }
 }
 
-#[derive(Debug, Clone, Deref, DerefMut, Default)]
+#[derive(Debug, Clone, Deref, DerefMut, Default, Into)]
 pub struct BundleAnalysis(HashMap<String, u64>);
 
 pub trait BundleFormat {
