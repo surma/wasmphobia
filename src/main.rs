@@ -7,6 +7,7 @@ use std::{
 use anyhow::Context;
 
 use clap::Parser;
+use inferno::flamegraph::TextTruncateDirection;
 
 mod sourcemaps;
 mod wasm;
@@ -53,6 +54,7 @@ impl From<Args> for inferno::flamegraph::Options<'static> {
         options.min_width = value.size_threshold as f64 / 1000.0;
         options.frame_height = 24;
         options.name_type = "".to_string();
+        options.text_truncate_direction = TextTruncateDirection::Right;
         options
     }
 }
