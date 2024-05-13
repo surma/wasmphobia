@@ -10,6 +10,7 @@ checksum = "6e4503c46a5c0c7844e948c9a4d6acd9f50cccb4de1c48eb9e291ea17470c678"
 dependencies = [
  "fallible-iterator",
  "gimli",
+ "object",
 ]
 
 [[package]]

@@ -14,7 +14,7 @@ lto = true
 codegen-units = 1
 
 [dependencies]
-addr2line = { version = "0.22.0", default-features = false, features = ["fallible-iterator", "std"] }
+addr2line = { version = "0.22.0", default-features = false, features = ["fallible-iterator", "std", "std-object"] }
 anyhow = "1.0.82"
 clap = { version = "4.5.4", features = ["derive"] }
 cpp_demangle = "0.4.3"

@@ -1,3 +1,5 @@
+pub mod dwarf;
+pub mod macho;
 pub mod sourcemaps;
 pub mod wasm;
 
