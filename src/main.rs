@@ -7,10 +7,14 @@ use std::{
 use anyhow::Context;
 
 use clap::Parser;
+use formats::{
+    analyze_bundle,
+    sourcemaps::{EmbeddedSourceMapBundle, RawSourceMapBundle},
+    wasm::WasmBundle,
+};
 use inferno::flamegraph::TextTruncateDirection;
 
-mod sourcemaps;
-mod wasm;
+mod formats;
 
 #[derive(Clone, Debug, Parser)]
 #[command(version)]
@@ -63,37 +67,33 @@ fn main() -> anyhow::Result<()> {
     let stdinout_marker: PathBuf = PathBuf::from("-");
 
     let args = Args::parse();
-    let mut input_data = match &args.input {
+    let input_data = match &args.input {
         Some(path) if path != &stdinout_marker => std::fs::read(path).context("Reading input")?,
         _ => read_stdin()?,
     };
 
-    if sourcemaps::has_embedded_sourcemap(&input_data) {
-        input_data = sourcemaps::unembed_sourcemap(&input_data).context("Unembedding sourcemap")?;
-    }
-    let contributors = if sourcemaps::is_sourcemap(&input_data) {
-        sourcemaps::analyze_sourcemaps(&args, &input_data).context("Analyzing sourcemaps")?
-    } else {
-        wasm::analyze_wasm(&args, &input_data).context("Analyzing wasm")?
-    };
+    let bundle_analysis = analyze_bundle::<(
+        WasmBundle,
+        (RawSourceMapBundle, EmbeddedSourceMapBundle),
+    )>(&args.clone().into(), &input_data)?;
 
     let output: Box<dyn Write> = match &args.output {
         Some(path) if path != &stdinout_marker => Box::new(std::fs::File::create(path)?),
         _ => Box::new(std::io::stdout()),
     };
 
-    write_flamegraph(contributors, args.into(), output).context("Rendering flame graph")?;
+    write_flamegraph(&bundle_analysis, args.into(), output).context("Rendering flame graph")?;
 
     Ok(())
 }
 
 fn write_flamegraph(
-    contributors: HashMap<String, u64>,
+    contributors: &HashMap<String, u64>,
     mut options: inferno::flamegraph::Options<'_>,
     mut output: Box<dyn Write>,
 ) -> anyhow::Result<()> {
     let inferno_lines: Vec<_> = contributors
-        .into_iter()
+        .iter()
         .map(|(key, size)| format!("{} {}", key, size))
         .collect();
     inferno::flamegraph::from_lines(

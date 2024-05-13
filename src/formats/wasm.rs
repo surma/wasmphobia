@@ -6,7 +6,7 @@ use addr2line::{
 };
 use anyhow::Context;
 
-use crate::Args;
+use super::{BundleAnalysis, BundleAnalysisConfig, BundleFormat};
 
 pub struct Section {
     name: String,
@@ -21,47 +21,57 @@ impl Section {
     }
 }
 
-pub fn analyze_wasm(args: &Args, input_data: &[u8]) -> anyhow::Result<HashMap<String, u64>> {
-    let module_size = input_data.len();
-    let (dwarf, mut sections) = parse_wasm(input_data).context("Parsing Wasm")?;
-    if !args.show_debug_sections {
-        sections.retain(|sect| !sect.name.starts_with(".debug"));
+pub struct WasmBundle;
+
+const WASM_MAGIC_NUMBER: &[u8] = &[0x00, 0x61, 0x73, 0x6d];
+impl BundleFormat for WasmBundle {
+    fn can_handle(input_data: &[u8]) -> bool {
+        &input_data[0..WASM_MAGIC_NUMBER.len()] == WASM_MAGIC_NUMBER
     }
-    let context = addr2line::Context::from_dwarf(dwarf).context("Constructing address mapping")?;
-    let mut contributors = HashMap::new();
-    let locations: Vec<_> = FallibleIterator::collect(
-        context.find_location_range(0, module_size.try_into().unwrap())?,
-    )?;
-    for (map_start, size, loc) in locations.into_iter().rev() {
-        let map_end = map_start + size;
-        let section_name = if let Some(section) = sections
-            .iter_mut()
-            .find(|s| s.start <= map_start && s.end > map_end)
-        {
-            section.mapped += size;
-            section.name.as_str()
-        } else {
-            "<unknown section>"
-        };
-        let file = loc.file.unwrap_or("<unknown file>");
 
-        let mut key = format!(
-            "@section: {section_name};{}",
-            file.trim_start_matches('/').replace('/', ";")
-        );
-
-        if !args.files_only {
-            let funcs = functions_for_address(args, &context, map_start)?;
-            key = format!("{key};{}", funcs.join(";"));
+    fn analyze(config: &BundleAnalysisConfig, input_data: &[u8]) -> anyhow::Result<BundleAnalysis> {
+        let module_size = input_data.len();
+        let (dwarf, mut sections) = parse_wasm(input_data).context("Parsing Wasm")?;
+        if !config.retain_debug_sections {
+            sections.retain(|sect| !sect.name.starts_with(".debug"));
         }
+        let context =
+            addr2line::Context::from_dwarf(dwarf).context("Constructing address mapping")?;
+        let mut contributors = BundleAnalysis::default();
+        let locations: Vec<_> = FallibleIterator::collect(
+            context.find_location_range(0, module_size.try_into().unwrap())?,
+        )?;
+        for (map_start, size, loc) in locations.into_iter().rev() {
+            let map_end = map_start + size;
+            let section_name = if let Some(section) = sections
+                .iter_mut()
+                .find(|s| s.start <= map_start && s.end > map_end)
+            {
+                section.mapped += size;
+                section.name.as_str()
+            } else {
+                "<unknown section>"
+            };
+            let file = loc.file.unwrap_or("<unknown file>");
 
-        *contributors.entry(key).or_insert(0) += size;
+            let mut key = format!(
+                "@section: {section_name};{}",
+                file.trim_start_matches('/').replace('/', ";")
+            );
+
+            if !config.files_only {
+                let funcs = functions_for_address(config, &context, map_start)?;
+                key = format!("{key};{}", funcs.join(";"));
+            }
+
+            *contributors.entry(key).or_insert(0) += size;
+        }
+        for segment in sections {
+            let key = format!("@section: {};<no mapping info>", segment.name);
+            *contributors.entry(key).or_insert(0) += segment.size() - segment.mapped;
+        }
+        Ok(contributors)
     }
-    for segment in sections {
-        let key = format!("@section: {};<no mapping info>", segment.name);
-        *contributors.entry(key).or_insert(0) += segment.size() - segment.mapped;
-    }
-    Ok(contributors)
 }
 
 pub fn parse_wasm<'a>(
@@ -132,7 +142,7 @@ pub fn parse_wasm<'a>(
 }
 
 fn functions_for_address<R: addr2line::gimli::Reader>(
-    args: &Args,
+    config: &BundleAnalysisConfig,
     context: &addr2line::Context<R>,
     map_start: u64,
 ) -> anyhow::Result<Vec<String>> {
@@ -145,7 +155,7 @@ fn functions_for_address<R: addr2line::gimli::Reader>(
             } else {
                 "<Unknown>".to_string()
             };
-            if !args.raw_symbols {
+            if !config.raw_symbols {
                 if let Ok(demangled) = rustc_demangle::try_demangle(&name) {
                     name = demangled.to_string();
                 }
