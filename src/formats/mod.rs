@@ -46,18 +46,17 @@ impl<F1: BundleFormat, F2: BundleFormat> BundleFormat for (F1, F2) {
     }
 }
 
-impl<F1: BundleFormat, F2: BundleFormat, F3: BundleFormat> BundleFormat for (F1, F2, F3) {
-    fn can_handle(data: &[u8]) -> bool {
-        F1::can_handle(data) || F2::can_handle(data)
-    }
-
-    fn analyze(config: &BundleAnalysisConfig, data: &[u8]) -> anyhow::Result<BundleAnalysis> {
-        if F1::can_handle(data) {
-            Ok(F1::analyze(config, data)?)
-        } else {
-            Ok(F2::analyze(config, data)?)
-        }
-    }
+#[macro_export]
+macro_rules! analyze_bundle_with_formats {
+    (@, $a:ident) => {
+        $a
+    };
+    (@, $a:ident, $($f:ident),*) => {
+        ($a, analyze_bundle_with_formats!(@, $($f),*))
+    };
+    ($c:expr, $v:expr,$($f:ident),*, ) => {
+        analyze_bundle::<analyze_bundle_with_formats!(@, $($f),*)>($c, $v)
+    };
 }
 
 pub fn analyze_bundle<T: BundleFormat>(

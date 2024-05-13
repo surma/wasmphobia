@@ -47,11 +47,11 @@ impl BundleFormat for RawSourceMapBundle {
     }
 }
 
-const REF_MARKER: &[u8] = b"//# sourceMappingURL=data:";
+const REF_MARKER: &[u8] = b"sourceMappingURL=data:";
 pub struct EmbeddedSourceMapBundle;
 impl BundleFormat for EmbeddedSourceMapBundle {
     fn can_handle(input_data: &[u8]) -> bool {
-        const BASE64_MARKER: &[u8] = b"base64,eY";
+        const BASE64_MARKER: &[u8] = b"base64,ey";
         input_data
             .windows(REF_MARKER.len())
             .any(|chunk| chunk == REF_MARKER)

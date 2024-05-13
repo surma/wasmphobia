@@ -72,10 +72,13 @@ fn main() -> anyhow::Result<()> {
         _ => read_stdin()?,
     };
 
-    let bundle_analysis = analyze_bundle::<(
+    let bundle_analysis = analyze_bundle_with_formats!(
+        &args.clone().into(),
+        &input_data,
         WasmBundle,
-        (RawSourceMapBundle, EmbeddedSourceMapBundle),
-    )>(&args.clone().into(), &input_data)?;
+        RawSourceMapBundle,
+        EmbeddedSourceMapBundle,
+    )?;
 
     let output: Box<dyn Write> = match &args.output {
         Some(path) if path != &stdinout_marker => Box::new(std::fs::File::create(path)?),
