@@ -25,6 +25,9 @@ pub struct WasmBundle;
 
 const WASM_MAGIC_NUMBER: &[u8] = &[0x00, 0x61, 0x73, 0x6d];
 impl BundleFormat for WasmBundle {
+    fn name() -> String {
+        "Wasm".into()
+    }
     fn can_handle(input_data: &[u8]) -> bool {
         &input_data[0..WASM_MAGIC_NUMBER.len()] == WASM_MAGIC_NUMBER
     }
@@ -39,7 +42,9 @@ impl BundleFormat for WasmBundle {
             addr2line::Context::from_dwarf(dwarf).context("Constructing address mapping")?;
         let mut contributors = BundleAnalysis::default();
         let locations: Vec<_> = FallibleIterator::collect(
-            context.find_location_range(0, module_size.try_into().unwrap())?,
+            context
+                .find_location_range(0, module_size.try_into().unwrap())
+                .context("Find locations")?,
         )?;
         for (map_start, size, loc) in locations.into_iter().rev() {
             let map_end = map_start + size;
@@ -60,7 +65,11 @@ impl BundleFormat for WasmBundle {
             );
 
             if !config.files_only {
-                let funcs = functions_for_address(config, &context, map_start)?;
+                let funcs = functions_for_address(config, &context, map_start)
+                    .inspect_err(|err| {
+                        eprintln!("Could not extract function names for region: {err}")
+                    })
+                    .unwrap_or_default();
                 key = format!("{key};{}", funcs.join(";"));
             }
 

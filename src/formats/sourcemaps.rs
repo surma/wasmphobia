@@ -7,6 +7,10 @@ use super::{BundleAnalysisConfig, BundleFormat};
 
 pub struct RawSourceMapBundle;
 impl BundleFormat for RawSourceMapBundle {
+    fn name() -> String {
+        "SourceMap".into()
+    }
+
     fn can_handle(input_data: &[u8]) -> bool {
         const MARKER: &[u8] = b"\"mappings\"";
         if input_data[0] != b'{' {
@@ -50,6 +54,10 @@ impl BundleFormat for RawSourceMapBundle {
 const REF_MARKER: &[u8] = b"sourceMappingURL=data:";
 pub struct EmbeddedSourceMapBundle;
 impl BundleFormat for EmbeddedSourceMapBundle {
+    fn name() -> String {
+        "Embedded SourceMap".into()
+    }
+
     fn can_handle(input_data: &[u8]) -> bool {
         const BASE64_MARKER: &[u8] = b"base64,ey";
         input_data

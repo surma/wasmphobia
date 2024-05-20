@@ -78,7 +78,8 @@ fn main() -> anyhow::Result<()> {
         WasmBundle,
         RawSourceMapBundle,
         EmbeddedSourceMapBundle,
-    )?;
+    )
+    .context("Analyzing bundle")?;
 
     let output: Box<dyn Write> = match &args.output {
         Some(path) if path != &stdinout_marker => Box::new(std::fs::File::create(path)?),
