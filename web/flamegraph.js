@@ -5,11 +5,14 @@ export default async function renderFlameGraph(file, options = []) {
   const data = await new Response(file).arrayBuffer();
   const input = new WasiFile(data);
   const output = new WasiFile();
-  const error = new WasiFile();
+  let errorLog;
   const wasi = new WASI(["__", `--title=${fileName}`, ...options], [], [
     new OpenFile(input),
     new OpenFile(output),
-    new OpenFile(error),
+    ConsoleStdout.lineBuffered(msg => {
+      errorLog += msg + "\n";
+      console.warn(msg);
+    }),
   ]);
   let wasm_url = new URL("../target/wasm32-wasi/release/wasmphobia.opt.wasm", import.meta.url);
   if (import.meta.env.MODE !== "production") {
@@ -21,8 +24,7 @@ export default async function renderFlameGraph(file, options = []) {
 
   const ret = wasi.start({ exports: instance.exports });
   if (ret != 0) {
-    const errorMessage = new TextDecoder().decode(error.data);
-    throw Error("Could not create flamegraph: " + errorMessage);
+    throw Error("Could not create flamegraph: " + errorLog);
   }
   return new TextDecoder().decode(output.data);
 }

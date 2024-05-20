@@ -1,5 +1,7 @@
 use std::{collections::HashMap, ops::Range};
 
+use log::warn;
+
 use addr2line::{
     fallible_iterator::FallibleIterator,
     gimli::{read::Dwarf, EndianSlice, LittleEndian},
@@ -66,9 +68,7 @@ impl BundleFormat for WasmBundle {
 
             if !config.files_only {
                 let funcs = functions_for_address(config, &context, map_start)
-                    .inspect_err(|err| {
-                        eprintln!("Could not extract function names for region: {err}")
-                    })
+                    .inspect_err(|err| warn!("Could not extract function names for region: {err}"))
                     .unwrap_or_default();
                 key = format!("{key};{}", funcs.join(";"));
             }

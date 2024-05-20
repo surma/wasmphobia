@@ -13,6 +13,7 @@ use formats::{
     wasm::WasmBundle,
 };
 use inferno::flamegraph::TextTruncateDirection;
+use log::info;
 
 mod formats;
 
@@ -64,6 +65,11 @@ impl From<Args> for inferno::flamegraph::Options<'static> {
 }
 
 fn main() -> anyhow::Result<()> {
+    env_logger::Builder::new()
+        .filter_level(log::LevelFilter::Debug)
+        .parse_default_env()
+        .init();
+    info!("Starting...");
     let stdinout_marker: PathBuf = PathBuf::from("-");
 
     let args = Args::parse();
