@@ -39,6 +39,8 @@
 }
 
 .error-text {
+  font-family: monospace;
+  white-space: pre;
 }
 .error-bar {
 }
