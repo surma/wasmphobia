@@ -19,15 +19,27 @@ pub fn functions_for_address<R: addr2line::gimli::Reader>(
                 "<Unknown>".to_string()
             };
             if !config.raw_symbols {
-                if let Ok(demangled) = rustc_demangle::try_demangle(&name) {
-                    name = demangled.to_string();
-                }
-                if let Ok(demangled) = cpp_demangle::Symbol::new(name.clone()) {
-                    name = demangled.to_string();
+                if let Ok(demangled) = demangle_rust(&name) {
+                    name = demangled;
+                } else if let Ok(demangled) = demangle_cpp(&name) {
+                    name = demangled;
+                } else {
+                    name = format!("{name} (demangling failed)");
                 }
             }
             Ok(Some(format!("@function: {name}")))
         })
         .collect()?;
     Ok(funcs)
+}
+
+fn demangle_cpp(name: impl AsRef<str>) -> anyhow::Result<String> {
+    let symbol = cpp_demangle::Symbol::new(name.as_ref())?;
+    Ok(symbol.demangle(&Default::default())?)
+}
+
+fn demangle_rust(name: impl AsRef<str>) -> anyhow::Result<String> {
+    Ok(rustc_demangle::try_demangle(name.as_ref())
+        .map_err(|err| anyhow::anyhow!("{err:?}"))?
+        .to_string())
 }
